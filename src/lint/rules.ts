@@ -13,8 +13,6 @@ type RuleFactory = (config?: any) => { check(node: any, reporter: Reporter): boo
 
 const is = (node: any, type: string) => typeof node?.$instanceOf === "function" && node.$instanceOf(type);
 
-export const MAX_NODES_PER_LEVEL = 30;
-
 /** A call activity must reference the reusable process it calls. */
 const callActivityRef: RuleFactory = () => ({
   check(node, reporter) {
@@ -38,14 +36,24 @@ const ruleTaskDecision: RuleFactory = () => ({
   },
 });
 
-/** Too many nodes on one level means mixed abstraction levels: split with a call activity or sub-process. */
-const abstractionLevel: RuleFactory = (config?: { max?: number }) => ({
+/**
+ * Readability: activities (tasks, sub-processes, call activities) per level, i.e. directly in a process
+ * or a sub-process; events and gateways do not count. A soft rule, never an error: thresholds and
+ * severities live in src/lint/config.ts ("activity-count-hint" above `above` up to `upTo`, then
+ * "activity-count"). A dismissal is kept per level (the count is neutralized in the fingerprint).
+ */
+export const activityCount: RuleFactory = (config?: { above?: number; upTo?: number }) => ({
   check(node, reporter) {
     if (!is(node, "bpmn:Process") && !is(node, "bpmn:SubProcess")) return;
-    const max = config?.max ?? MAX_NODES_PER_LEVEL;
-    const n = (node.flowElements ?? []).filter((e: any) => is(e, "bpmn:FlowNode")).length;
-    if (n > max)
-      reporter.report(node.id, `${n} nodes at one level (> ${max}). Consider a call activity or sub-process.`);
+    const above = config?.above ?? 12;
+    const n = (node.flowElements ?? []).filter((e: any) => is(e, "bpmn:Activity")).length;
+    if (n <= above || (config?.upTo !== undefined && n > config.upTo)) return;
+    reporter.report(
+      node.id,
+      `${n} activities at this level (more than ${above}): if a coherent fragment exists (one entry, one exit, one business ` +
+        "result, no message flow across its border, ideally one lane), group it into a collapsed sub-process named verb + object, " +
+        "or a call activity if it is reused elsewhere. Do not split a short linear flow just to pass the threshold.",
+    );
   },
 });
 
@@ -70,7 +78,8 @@ export const pmRules: Record<string, RuleFactory> = {
   "call-activity-ref": callActivityRef,
   "user-task-form": userTaskForm,
   "rule-task-decision": ruleTaskDecision,
-  "abstraction-level": abstractionLevel,
+  "activity-count": activityCount,
+  "activity-count-hint": activityCount,
   "gateway-flow-label": gatewayFlowLabel,
   ...layoutRules,
 };

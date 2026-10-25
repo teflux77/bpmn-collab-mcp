@@ -67,9 +67,13 @@ interface Di {
   edges: { el: any; points: Point[]; label?: Rect }[];
 }
 
-function collectDi(definitions: any): Di {
-  const di: Di = { shapes: [], edges: [] };
-  for (const diagram of definitions.diagrams ?? []) {
+/**
+ * DI per plane: each BPMNDiagram is its own canvas (a collapsed sub-process has a drill-down plane
+ * whose coordinates overlap the main plane's), so geometry is only compared within one plane.
+ */
+function diPlanes(definitions: any): Di[] {
+  return (definitions.diagrams ?? []).map((diagram: any) => {
+    const di: Di = { shapes: [], edges: [] };
     for (const pe of diagram.plane?.planeElement ?? []) {
       const el = pe.bpmnElement;
       if (!el) continue;
@@ -77,8 +81,8 @@ function collectDi(definitions: any): Di {
       if (is(pe, "bpmndi:BPMNShape") && pe.bounds) di.shapes.push({ el, bounds: pe.bounds, label, expanded: !!pe.isExpanded });
       if (is(pe, "bpmndi:BPMNEdge") && pe.waypoint?.length) di.edges.push({ el, points: pe.waypoint, label });
     }
-  }
-  return di;
+    return di;
+  });
 }
 
 const segments = (points: Point[]) => points.slice(1).map((q, i) => [points[i], q] as const);
@@ -95,7 +99,7 @@ const sharedAttachmentPoint: RuleFactory = () => ({
       byPoint.set(key, [...(byPoint.get(key) ?? []), flowId]);
       ends.set(shapeId, byPoint);
     };
-    for (const e of collectDi(node).edges) {
+    for (const e of diPlanes(node).flatMap((p) => p.edges)) {
       if (!is(e.el, "bpmn:SequenceFlow") && !is(e.el, "bpmn:MessageFlow")) continue;
       add(e.el.sourceRef?.id, e.points[0], e.el.id);
       add(e.el.targetRef?.id, e.points[e.points.length - 1], e.el.id);
@@ -113,34 +117,37 @@ const sharedAttachmentPoint: RuleFactory = () => ({
 const labelOverlap: RuleFactory = () => ({
   check(node, reporter) {
     if (!is(node, "bpmn:Definitions")) return;
-    const { shapes, edges } = collectDi(node);
-    const labels = [
-      ...shapes.filter((s) => s.label).map((s) => ({ el: s.el, box: s.label! })),
-      ...edges.filter((e) => e.label).map((e) => ({ el: e.el, box: e.label! })),
-    ];
-    for (const { el, box } of labels) {
-      const b = inset(box, EPS);
-      const hits: string[] = [];
-      for (const s of shapes) {
-        if (isContainer(s)) {
-          if (rectsOverlap(b, s.bounds) && !contains(s.bounds, box)) hits.push(`crosses the border of ${s.el.id}`);
-        } else if (rectsOverlap(b, s.bounds)) hits.push(`overlaps shape ${s.el.id}`);
-      }
-      for (const o of labels) if (o.el !== el && rectsOverlap(b, o.box)) hits.push(`overlaps the label of ${o.el.id}`);
-      for (const e of edges) {
-        if (segments(e.points).some(([p, q]) => segmentHitsRect(p, q, b)))
-          hits.push(e.el === el ? "sits on its own flow line" : `is crossed by flow ${e.el.id}`);
-      }
-      if (hits.length) reporter.report(el.id, `Label ${hits.join("; ")}`);
-    }
+    for (const plane of diPlanes(node)) checkLabels(plane, reporter);
   },
 });
+
+function checkLabels({ shapes, edges }: Di, reporter: Reporter) {
+  const labels = [
+    ...shapes.filter((s) => s.label).map((s) => ({ el: s.el, box: s.label! })),
+    ...edges.filter((e) => e.label).map((e) => ({ el: e.el, box: e.label! })),
+  ];
+  for (const { el, box } of labels) {
+    const b = inset(box, EPS);
+    const hits: string[] = [];
+    for (const s of shapes) {
+      if (isContainer(s)) {
+        if (rectsOverlap(b, s.bounds) && !contains(s.bounds, box)) hits.push(`crosses the border of ${s.el.id}`);
+      } else if (rectsOverlap(b, s.bounds)) hits.push(`overlaps shape ${s.el.id}`);
+    }
+    for (const o of labels) if (o.el !== el && rectsOverlap(b, o.box)) hits.push(`overlaps the label of ${o.el.id}`);
+    for (const e of edges) {
+      if (segments(e.points).some(([p, q]) => segmentHitsRect(p, q, b)))
+        hits.push(e.el === el ? "sits on its own flow line" : `is crossed by flow ${e.el.id}`);
+    }
+    if (hits.length) reporter.report(el.id, `Label ${hits.join("; ")}`);
+  }
+}
 
 /** Named gateways need explicit label bounds: bpmn-js default placement overlaps neighbours. */
 const gatewayLabelBounds: RuleFactory = () => ({
   check(node, reporter) {
     if (!is(node, "bpmn:Definitions")) return;
-    for (const s of collectDi(node).shapes) {
+    for (const s of diPlanes(node).flatMap((p) => p.shapes)) {
       if (is(s.el, "bpmn:Gateway") && s.el.name?.trim() && !s.label)
         reporter.report(s.el.id, "Named gateway has no explicit BPMNLabel bounds (place the label centred, 8-12 px above the diamond)");
     }

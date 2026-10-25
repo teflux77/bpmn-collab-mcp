@@ -12,6 +12,23 @@ description: Create, review and evolve BPMN 2.0 / DMN diagrams with a human thro
 4. Modify with `update_diagram` passing the `baseVersion` you read. On a conflict, re-read and merge.
 5. `update_diagram` returns the open issues (with fingerprints) and a loop guard: errors reject the save; triage the warnings as described in "Lint issues" below, never in an open-ended loop.
 
+## Readability: activities per level
+Count activities (tasks, sub-processes, call activities) per level (the process, or one sub-process); events and gateways do not count. Aim for readable levels **from the first draft**:
+- up to 8 activities: fine;
+- 9 to 12: light suggestion (`pm/activity-count-hint`, info);
+- more than 12: clearer warning (`pm/activity-count`); never blocking.
+
+When a level is too busy, group a coherent fragment into a **collapsed sub-process** (drill-down):
+- one entry and one exit, one identifiable business result, no sequence flow crossing its border elsewhere than at the entry and the exit, preferably within one lane;
+- a **message flow** that would cross the border blocks the grouping;
+- name it verb + object ("Ship order");
+- DI: the sub-process shape has `isExpanded="false"` in the parent plane; its content goes on its own plane (`bpmndi:BPMNDiagram` whose `BPMNPlane` has `bpmnElement` = the sub-process id), with complete DI that passes the layout checks.
+
+Nuances:
+- Do not split a short linear flow just to get under the threshold: dismiss the suggestion with that reason instead.
+- A fragment reused elsewhere becomes a **call activity** (`calledElement`) rather than a sub-process.
+- If the human refuses (comment or dismissal), respect it and do not suggest it again.
+
 ## Lint issues: triage, never loop
 Issues carry a stable `fingerprint` and a `status` (open / dismissed); `list_issues` lists them, `get_diagram`, `validate_diagram` and `update_diagram` return them too. For each open warning or info:
 - **(a) Real problem, safe and unambiguous fix** (missing name, missing DI, obvious label of an XOR branch, label overlap): fix it.
@@ -32,7 +49,7 @@ End with a summary: **X fixed, Y dismissed (with reasons), Z waiting for the hum
 - Valid BPMN 2.0 XML including DI (bpmndi shapes and edges with coordinates).
 - Task names: verb + object. Gateway names: a question. Outgoing XOR flows: labeled.
 - One start event per process level; explicit end events.
-- Sub-process: embedded detail, same context, no pool or lane. Call activity: reusable process (`calledElement`). Do not mix abstraction levels in one diagram; split above ~30 nodes.
+- Sub-process: embedded detail, same context, no pool or lane. Call activity: reusable process (`calledElement`). Do not mix abstraction levels in one diagram (see "Readability" below).
 - Put business data in `bpmn:extensionElements` using `pm:Meta` (owner, system, sla, kpi, formRef, decisionRef), not in separate notes.
 - Pools = organizations, lanes = roles; use message flows only between pools.
 

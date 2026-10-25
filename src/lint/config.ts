@@ -34,7 +34,9 @@ export const lintConfig = {
     // project rules (src/lint/rules.ts)
     "pm/call-activity-ref": "error",
     "pm/gateway-flow-label": "warn",
-    "pm/abstraction-level": "warn",
+    // Readability (soft, never an error): activities per level. Thresholds: change them here only.
+    "pm/activity-count-hint": ["info", { above: 8, upTo: 12 }], // 9-12 activities: light suggestion
+    "pm/activity-count": ["warn", { above: 12 }], // 13 and more: clearer warning
     "pm/user-task-form": "info",
     "pm/rule-task-decision": "info",
 

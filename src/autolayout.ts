@@ -202,6 +202,33 @@ export async function autoLayout(xml: string): Promise<LayoutResult> {
     if (!spot) notes.push(`Label of ${el.id} could not avoid every neighbour: check pm/label-overlap.`);
   }
 
+  drillDownPlanes(m, defs);
+
   const { xml: out } = await m.toXML(defs, { format: true });
   return { xml: out, notes };
+}
+
+/**
+ * bpmn-auto-layout draws collapsed sub-processes the legacy way: their content in the parent plane.
+ * Move it to the sub-process's own plane (one BPMNDiagram per collapsed sub-process), the drill-down
+ * form bpmn-js produces and expects; nested sub-processes are handled level by level.
+ */
+function drillDownPlanes(m: any, defs: any) {
+  const planes = () => (defs.diagrams ?? []).map((d: any) => d.plane).filter(Boolean);
+  const queue = (defs.rootElements ?? []).filter((r: any) => is(r, "bpmn:Process")).flatMap((p: any) => p.flowElements ?? []);
+  while (queue.length) {
+    const sub = queue.shift();
+    if (!is(sub, "bpmn:SubProcess")) continue;
+    queue.push(...(sub.flowElements ?? []));
+    const host = planes().find((pl: any) => pl.planeElement?.some((pe: any) => pe.bpmnElement === sub));
+    const shape = host?.planeElement.find((pe: any) => pe.bpmnElement === sub);
+    if (!shape || shape.isExpanded === true) continue;
+    shape.isExpanded = false;
+    const children = new Set([...(sub.flowElements ?? []), ...(sub.artifacts ?? [])]);
+    const moved = host.planeElement.filter((pe: any) => children.has(pe.bpmnElement));
+    if (!moved.length) continue;
+    host.planeElement = host.planeElement.filter((pe: any) => !children.has(pe.bpmnElement));
+    const plane = m.create("bpmndi:BPMNPlane", { id: `${sub.id}_plane`, bpmnElement: sub, planeElement: moved });
+    defs.diagrams.push(m.create("bpmndi:BPMNDiagram", { id: `${sub.id}_diagram`, plane }));
+  }
 }
