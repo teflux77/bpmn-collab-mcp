@@ -34,7 +34,7 @@ Anthropic's outbound range is `160.79.104.0/21` (checked 2026-10-25 on https://p
 ## First deployment (in this order)
 
 0. **Prerequisites**: tests green (`npm test`), `gh auth login` done, `.env.local` filled: `GANDI_PAT`, `HCLOUD_TOKEN`, `VPS_IP`, `ADMIN_IP` (and `VPS_IPV6`, printed by step 2).
-1. **GitHub**: create the public repo and push `main` (CI builds the image), then make the GHCR package public once: GitHub → your profile → Packages → `bpmn-collab-mcp` → Package settings → Change visibility → Public. (A private package would need a read token on the VPS.)
+1. **GitHub**: create the public repo and push `main` (CI builds the image). The GHCR package inherits the public visibility of the repo; check that an anonymous pull works (`docker pull ghcr.io/teflux77/bpmn-collab-mcp:latest` logged out). If it does not: GitHub → your profile → Packages → `bpmn-collab-mcp` → Package settings → Change visibility → Public. (A private package would need a read token on the VPS.)
 2. **Firewall**: `npm run firewall` (dry-run, also prints the IPv6 to use), then `npm run firewall -- --apply`.
 3. **DNS**: `npm run dns` (dry-run; checks the delegation to LiveDNS), then `npm run dns -- --apply`. Check: `nslookup bpmn.teflux.dev`.
 4. **Server bootstrap**: read `scripts/server/bootstrap-server.sh`, then
