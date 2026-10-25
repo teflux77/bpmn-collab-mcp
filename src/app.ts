@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { Store, StoreError } from "./store.js";
+import { Store, StoreError, openComments } from "./store.js";
 import { validateXml } from "./validate.js";
 import { diffXml } from "./diff.js";
 import { parse } from "./model.js";
@@ -52,7 +52,9 @@ function buildMcp({ store, publicUrl }: AppOptions) {
   s.registerTool(
     "get_diagram",
     {
-      description: "Get the CURRENT XML (including human edits) plus open comments. Always call this before modifying a diagram.",
+      description:
+        "Get the CURRENT XML (including human edits) plus open comments. Always call this before modifying a diagram. " +
+        'Open comments of kind "ai-request" come first: they are instructions from the human; apply them, then resolve_comment.',
       inputSchema: { id: z.string() },
     },
     async ({ id }) => {
@@ -61,7 +63,7 @@ function buildMcp({ store, publicUrl }: AppOptions) {
       const rev = store.latest(d);
       return text({
         id, name: d.name, version: rev.version, lastAuthor: rev.author, xml: rev.xml,
-        openComments: d.comments.filter((c) => c.status === "open"),
+        openComments: openComments(d.comments),
       });
     },
   );
@@ -116,13 +118,13 @@ function buildMcp({ store, publicUrl }: AppOptions) {
   s.registerTool(
     "list_comments",
     {
-      description: "List comments anchored on BPMN element ids (optionally only open ones).",
+      description: 'List comments anchored on BPMN element ids (optionally only open ones; open "ai-request" comments first).',
       inputSchema: { id: z.string(), onlyOpen: z.boolean().optional() },
     },
     async ({ id, onlyOpen }) => {
       const d = store.get(id);
       if (!d) return fail({ error: "not found" });
-      return text(onlyOpen ? d.comments.filter((c) => c.status === "open") : d.comments);
+      return text(onlyOpen ? openComments(d.comments) : d.comments);
     },
   );
 
@@ -144,12 +146,12 @@ function buildMcp({ store, publicUrl }: AppOptions) {
   s.registerTool(
     "resolve_comment",
     {
-      description: "Mark a comment resolved (after applying the change it asked for).",
+      description: "Mark a comment resolved after applying the change it asked for (always do this for ai-request comments you applied).",
       inputSchema: { id: z.string(), commentId: z.string() },
     },
     async ({ id, commentId }) => {
       try {
-        return text(store.setCommentStatus(id, commentId, "resolved"));
+        return text(store.setCommentStatus(id, commentId, "resolved", "ai"));
       } catch (e) {
         if (e instanceof StoreError) return fail({ error: e.message });
         throw e;
@@ -198,7 +200,7 @@ export function createApp(opts: AppOptions) {
     const d = store.get(req.params.id);
     if (!d) return void res.status(404).json({ error: "not found" });
     const rev = store.latest(d);
-    res.json({ id: d.id, name: d.name, version: rev.version, xml: rev.xml, comments: d.comments, issues: await validateXml(rev.xml) });
+    res.json({ id: d.id, name: d.name, version: rev.version, lastAuthor: rev.author, xml: rev.xml, comments: d.comments, issues: await validateXml(rev.xml) });
   });
 
   // Human saves are always stored (never lose human work) unless the XML does not parse at all.
@@ -220,19 +222,26 @@ export function createApp(opts: AppOptions) {
   });
 
   app.post("/api/diagrams/:id/comments", async (req, res) => {
-    const { elementId, text: t, author, parentId } = req.body ?? {};
+    const { elementId, text: t, author, parentId, kind } = req.body ?? {};
     const d = store.get(req.params.id);
     if (!d) return void res.status(404).json({ error: "not found" });
     if (typeof elementId !== "string" || typeof t !== "string" || !t.trim())
       return void res.status(400).json({ error: "elementId and text are required" });
     const bad = await checkAnchor(store.latest(d).xml, elementId);
     if (bad) return void res.status(400).json({ error: bad });
-    res.json(store.addComment(d.id, { elementId, text: t, parentId, author: `human:${author ?? "anonymous"}` }));
+    res.json(
+      store.addComment(d.id, {
+        elementId, text: t, parentId,
+        kind: kind === "ai-request" ? "ai-request" : "note",
+        author: `human:${author ?? "anonymous"}`,
+      }),
+    );
   });
 
   app.patch("/api/diagrams/:id/comments/:cid", (req, res) => {
     try {
-      res.json(store.setCommentStatus(req.params.id, req.params.cid, req.body?.status === "open" ? "open" : "resolved"));
+      const status = req.body?.status === "open" ? "open" : "resolved";
+      res.json(store.setCommentStatus(req.params.id, req.params.cid, status, `human:${req.body?.author ?? "anonymous"}`));
     } catch (e) {
       if (e instanceof StoreError) return void res.status(e.code).json({ error: e.message });
       throw e;

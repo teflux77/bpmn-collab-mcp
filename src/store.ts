@@ -9,8 +9,18 @@ export interface Comment {
   author: string; // "human:<name>" or "ai"
   text: string;
   status: "open" | "resolved";
+  /** "ai-request": an instruction from a human that the AI must apply, then resolve. */
+  kind: "note" | "ai-request";
   parentId?: string; // reply thread
   createdAt: string;
+  resolvedBy?: string; // "ai" or "human:<name>"
+  resolvedAt?: string;
+}
+
+/** Open AI requests first, then the other open comments, oldest first within each group. */
+export function openComments(comments: Comment[]) {
+  const rank = (c: Comment) => (c.kind === "ai-request" ? 0 : 1);
+  return comments.filter((c) => c.status === "open").sort((a, b) => rank(a) - rank(b) || a.createdAt.localeCompare(b.createdAt));
 }
 
 export interface Revision {
@@ -68,7 +78,10 @@ export class Store {
     if (!dataDir) return;
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, "utf8")) as Diagram[];
-      raw.forEach((d) => this.diagrams.set(d.id, d));
+      raw.forEach((d) => {
+        d.comments.forEach((c) => (c.kind ??= "note")); // files written before comment kinds existed
+        this.diagrams.set(d.id, d);
+      });
     } catch {
       /* first run */
     }
@@ -125,12 +138,13 @@ export class Store {
     return rev;
   }
 
-  addComment(id: string, c: Omit<Comment, "id" | "createdAt" | "status"> & { status?: Comment["status"] }) {
+  addComment(id: string, c: Omit<Comment, "id" | "createdAt" | "status" | "kind" | "resolvedBy" | "resolvedAt"> & { kind?: Comment["kind"] }) {
     const d = this.diagrams.get(id);
     if (!d) throw notFound(`Diagram ${id} not found`);
     const comment: Comment = {
       ...c,
-      status: c.status ?? "open",
+      kind: c.kind ?? "note",
+      status: "open",
       id: randomUUID().slice(0, 8),
       createdAt: new Date().toISOString(),
     };
@@ -139,11 +153,18 @@ export class Store {
     return comment;
   }
 
-  setCommentStatus(id: string, commentId: string, status: Comment["status"]) {
+  setCommentStatus(id: string, commentId: string, status: Comment["status"], by: string) {
     const d = this.diagrams.get(id);
     const c = d?.comments.find((x) => x.id === commentId);
     if (!d || !c) throw notFound("Comment not found");
     c.status = status;
+    if (status === "resolved") {
+      c.resolvedBy = by;
+      c.resolvedAt = new Date().toISOString();
+    } else {
+      delete c.resolvedBy;
+      delete c.resolvedAt;
+    }
     this.persist();
     return c;
   }

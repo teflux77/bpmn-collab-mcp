@@ -18,6 +18,10 @@
       .i[title] { cursor: pointer; }
       .i.error { color: #c92a2a; }
       .i.warning { color: #a65e00; }
+      .hint { display: block; font-size: 12px; color: #666; margin: 4px 0; }
+      .c.ai-request { border-color: #4c6ef5; }
+      .c .done { display: block; margin-top: 4px; color: #2b8a3e; }
+      .c.open .done { color: #4c6ef5; }
       .badge { background: #e8590c; color: #fff; border-radius: 10px; font-size: 11px; padding: 0 6px; }
     </style>
   </head>
@@ -28,7 +32,9 @@
         <div id="status">Loading…</div>
         <div><b id="sel">No element selected</b></div>
         <textarea id="txt" rows="3" placeholder="Comment on the selected element"></textarea>
+        <label class="hint"><input type="checkbox" id="for-ai" checked /> Request for the AI</label>
         <button id="add">Add comment</button>
+        <div class="hint">The AI handles open requests at its next turn: ask Claude to “process the comments of this diagram”.</div>
         <hr />
         <b id="issues-title">Validation</b>
         <div id="issues"></div>

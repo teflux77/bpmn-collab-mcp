@@ -154,13 +154,36 @@ describe("REST used by the canvas (human saves)", () => {
     expect((await putHuman("nope", fixture("valid.bpmn"), 1)).status).toBe(404);
   });
 
+  const post = (elementId: string, extra: Record<string, unknown> = {}) =>
+    fetch(`${base}/api/diagrams/${id}/comments`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ elementId, text: "hello", author: "ana", ...extra }),
+    });
+
+  it("gives human AI requests to the AI first, and records who resolved them", async () => {
+    await post("Task_CheckOrder");
+    const req = await (await post("Task_ShipOrder", { kind: "ai-request", text: "Translate the name to French" })).json();
+    expect(req).toMatchObject({ kind: "ai-request", status: "open" });
+
+    const { body } = await call("get_diagram", { id });
+    expect(body.openComments.map((c: any) => c.kind)).toEqual(["ai-request", "note"]);
+
+    const { body: resolved } = await call("resolve_comment", { id, commentId: req.id });
+    expect(resolved).toMatchObject({ status: "resolved", resolvedBy: "ai" });
+  });
+
+  it("records the human who closes a comment from the canvas", async () => {
+    const c = await (await post("Task_CheckOrder")).json();
+    const r = await fetch(`${base}/api/diagrams/${id}/comments/${c.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "resolved", author: "ana" }),
+    });
+    expect(await r.json()).toMatchObject({ status: "resolved", resolvedBy: "human:ana" });
+  });
+
   it("rejects a human comment on an unknown element", async () => {
-    const post = (elementId: string) =>
-      fetch(`${base}/api/diagrams/${id}/comments`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ elementId, text: "hello", author: "ana" }),
-      });
     expect((await post("Nope")).status).toBe(400);
     const ok = await post("Task_CheckOrder");
     expect(ok.status).toBe(200);

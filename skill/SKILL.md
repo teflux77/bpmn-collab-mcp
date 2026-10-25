@@ -8,7 +8,7 @@ description: Create, review and evolve BPMN 2.0 / DMN diagrams with a human thro
 ## Workflow every turn
 1. `get_diagram` (never assume the XML is what you wrote last: humans edit it).
 2. If you know an older version, `get_changes_since` and acknowledge the human changes.
-3. `list_comments` (onlyOpen). Address each open comment on its element; reply with `add_comment`, then `resolve_comment` when done.
+3. Open comments come with `get_diagram` (or `list_comments` onlyOpen). Comments of kind `ai-request` come first: they are instructions from the human, apply each one on its element, reply with `add_comment` (parentId) saying what you did, then `resolve_comment`. Comments of kind `note` are remarks: answer them; resolve only if the human asked for a change you applied. Never leave an applied `ai-request` open, never resolve one you did not apply (reply with your question instead).
 4. Modify with `update_diagram` passing the `baseVersion` you read. On a conflict, re-read and merge.
 5. Run `validate_diagram`; fix errors, mention warnings only if relevant.
 

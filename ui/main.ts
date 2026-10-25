@@ -58,18 +58,34 @@ function render() {
     .filter((c) => !selected || c.elementId === selected)
     .forEach((c) => {
       const div = document.createElement("div");
-      div.className = `c ${c.status}`;
+      div.className = `c ${c.status} ${c.kind}`;
       const meta = document.createElement("small");
-      meta.textContent = `${c.author} · ${c.elementId}`;
+      meta.textContent = `${c.kind === "ai-request" ? "🤖 For the AI · " : ""}${c.author} · ${c.elementId}`;
       const body = document.createElement("div");
       body.textContent = c.text;
       div.append(meta, body);
-      if (c.status === "open") {
+      if (c.status === "resolved") {
+        const done = document.createElement("small");
+        done.className = "done";
+        done.textContent = c.resolvedBy === "ai" ? "✓ Applied by the AI" : `Closed by ${c.resolvedBy ?? "someone"}`;
+        div.appendChild(done);
+      } else if (c.kind === "ai-request") {
+        // No close button: the AI resolves a request once it has applied it.
+        const wait = document.createElement("small");
+        wait.className = "done";
+        wait.textContent = "Waiting for the AI's next turn";
+        div.appendChild(wait);
+      } else {
         const b = document.createElement("button");
-        b.textContent = "Resolve";
+        b.textContent = "Close";
+        b.title = "Close this comment without any AI action";
         b.onclick = async () => {
-          await fetch(`/api/diagrams/${id}/comments/${c.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "resolved" }) });
-          c.status = "resolved";
+          const r = await fetch(`/api/diagrams/${id}/comments/${c.id}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ status: "resolved", author }),
+          });
+          if (r.ok) Object.assign(c, await r.json());
           render();
         };
         div.appendChild(b);
@@ -132,7 +148,7 @@ $("#add").onclick = async () => {
   const r = await fetch(`/api/diagrams/${id}/comments`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ elementId: selected, text, author }),
+    body: JSON.stringify({ elementId: selected, text, author, kind: ($("#for-ai") as HTMLInputElement).checked ? "ai-request" : "note" }),
   });
   const body = await r.json();
   if (!r.ok) return status(`Comment rejected: ${body.error}`);
@@ -141,5 +157,18 @@ $("#add").onclick = async () => {
   render();
 };
 
+// Pick up comments resolved by the AI and newer revisions without reloading the canvas.
+async function poll() {
+  const r = await fetch(`/api/diagrams/${id}`);
+  if (!r.ok) return;
+  const d = await r.json();
+  comments = d.comments;
+  render();
+  if (d.version > version) status(`v${d.version} saved by ${d.lastAuthor ?? "someone else"}: reload to see it`);
+}
+
 if (!id) status("Missing ?id=");
-else load();
+else {
+  load();
+  setInterval(poll, 10_000);
+}

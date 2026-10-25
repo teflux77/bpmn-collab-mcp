@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { Store, StoreError, EMPTY_BPMN } from "../src/store.js";
+import { Store, StoreError, EMPTY_BPMN, openComments } from "../src/store.js";
 import { validateXml } from "../src/validate.js";
 import { fixture } from "./helpers.js";
 
@@ -47,17 +47,42 @@ describe("Store", () => {
     expect(() => s.update("nope", "", 1, "ai")).toThrow(expect.objectContaining({ code: 404 }));
     expect(() => s.addComment("nope", { elementId: "x", text: "t", author: "ai" })).toThrow(expect.objectContaining({ code: 404 }));
     const d = s.create("P");
-    expect(() => s.setCommentStatus(d.id, "nope", "resolved")).toThrow(expect.objectContaining({ code: 404 }));
+    expect(() => s.setCommentStatus(d.id, "nope", "resolved", "ai")).toThrow(expect.objectContaining({ code: 404 }));
   });
 
   it("adds, replies to and resolves comments", () => {
     const s = new Store();
     const d = s.create("P");
     const c = s.addComment(d.id, { elementId: "StartEvent_1", text: "Which trigger?", author: "human:ana" });
-    expect(c).toMatchObject({ status: "open", elementId: "StartEvent_1" });
+    expect(c).toMatchObject({ status: "open", kind: "note", elementId: "StartEvent_1" });
     const r = s.addComment(d.id, { elementId: "StartEvent_1", text: "A received order", author: "ai", parentId: c.id });
     expect(r.parentId).toBe(c.id);
-    expect(s.setCommentStatus(d.id, c.id, "resolved").status).toBe("resolved");
+    expect(s.setCommentStatus(d.id, c.id, "resolved", "ai")).toMatchObject({ status: "resolved", resolvedBy: "ai" });
+    const reopened = s.setCommentStatus(d.id, c.id, "open", "human:ana");
+    expect(reopened.status).toBe("open");
+    expect(reopened.resolvedBy).toBeUndefined();
+  });
+
+  it("lists open AI requests before notes", () => {
+    const s = new Store();
+    const d = s.create("P");
+    const note = s.addComment(d.id, { elementId: "StartEvent_1", text: "fyi", author: "human:ana" });
+    const req = s.addComment(d.id, { elementId: "StartEvent_1", text: "Rename in French", author: "human:ana", kind: "ai-request" });
+    const done = s.addComment(d.id, { elementId: "StartEvent_1", text: "old", author: "human:ana", kind: "ai-request" });
+    s.setCommentStatus(d.id, done.id, "resolved", "ai");
+    expect(openComments(s.get(d.id)!.comments).map((c) => c.id)).toEqual([req.id, note.id]);
+  });
+
+  it("loads comments saved before comment kinds existed as notes", () => {
+    const dir = tmpDir();
+    const a = new Store(dir);
+    const d = a.create("P");
+    a.addComment(d.id, { elementId: "StartEvent_1", text: "legacy", author: "ai" });
+    const file = path.join(dir, "diagrams.json");
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    delete raw[0].comments[0].kind;
+    fs.writeFileSync(file, JSON.stringify(raw));
+    expect(new Store(dir).get(d.id)!.comments[0].kind).toBe("note");
   });
 
   it("persists to disk and reloads", () => {
