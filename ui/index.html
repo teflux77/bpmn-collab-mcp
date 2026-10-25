@@ -34,7 +34,8 @@
         <textarea id="txt" rows="3" placeholder="Comment on the selected element"></textarea>
         <label class="hint"><input type="checkbox" id="for-ai" checked /> Request for the AI</label>
         <button id="add">Add comment</button>
-        <div class="hint">The AI handles open requests at its next turn: ask Claude to “process the comments of this diagram”.</div>
+        <div class="hint" id="hint">The AI handles open requests at its next turn: ask Claude to “process the comments of this diagram”.</div>
+        <div id="ask"></div>
         <hr />
         <b id="issues-title">Validation</b>
         <div id="issues"></div>

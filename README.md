@@ -32,6 +32,8 @@ npm start            # http://localhost:7860 (listens on 127.0.0.1; set HOST=0.0
 
 - MCP endpoint (streamable HTTP, stateless): `http://localhost:7860/mcp`
 - Human canvas: `http://localhost:7860/canvas?id=<diagramId>` (the id and URL are returned by `create_diagram`)
+- Inline canvas: in hosts that support MCP Apps (Claude web/Desktop), `create_diagram` and `get_diagram` render the same canvas in the conversation (`ui://bpmn-collab/canvas.html`); it talks to the server through app-only `canvas_*` tools and can post "apply the open AI requests" into the chat.
+- Environment: `PORT` (7860), `HOST` (127.0.0.1), `PUBLIC_URL`, `DATA_DIR`, `ALLOWED_HOSTS` (extra Host names accepted, comma-separated; localhost and the `PUBLIC_URL` host are always accepted).
 
 Add it to Claude as a custom connector (remote MCP URL, must be public HTTPS), or test locally with the MCP Inspector:
 
@@ -48,7 +50,7 @@ npx @modelcontextprotocol/inspector
 | `get_changes_since` | Semantic diff by element id between versions (bpmn-js-differ + `pm:` metadata): added, removed, modified fields, moved |
 | `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated) |
 | `validate_diagram` | Deterministic rules: bpmnlint `recommended` + project rules (`src/lint/`) |
-| `list_comments` / `add_comment` / `resolve_comment` | Element-anchored review threads |
+| `list_comments` / `add_comment` / `resolve_comment` | Element-anchored review threads; `ai-request` comments are human instructions the AI applies then resolves |
 | `export_diagram` | Plain BPMN XML |
 
 ## Deploying
@@ -60,7 +62,6 @@ There is no authentication yet. Do not expose it publicly with real data.
 
 ## Roadmap
 
-1. MCP Apps: render the canvas inline in Claude (`ui://` resource), replacing the external canvas URL.
 2. Publish the project rules (`src/lint/rules.ts`, already in bpmnlint format) as a `bpmnlint-plugin-*` package.
 3. DMN (dmn-js) and forms (form-js) linked from `pm:decisionRef` / `pm:formRef`.
 4. Process architecture graph (levels, parent/child, `calledElement` links) kept next to the BPMN files.

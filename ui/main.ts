@@ -3,37 +3,70 @@ import "bpmn-js/dist/assets/bpmn-js.css";
 import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import processMeta from "../src/moddle/process-meta.json";
+import { appBackend, restBackend, type Backend } from "./backend";
 
 const params = new URLSearchParams(location.search);
-const id = params.get("id");
-const author = localStorage.getItem("author") ?? prompt("Your name?") ?? "anonymous";
-localStorage.setItem("author", author);
+// Inline in an MCP Apps host: framed and opened without ?id= (the id comes from the tool call).
+const inline = window.parent !== window && !params.has("id");
+
+/** Storage and prompt() may be blocked in a sandboxed iframe. */
+function authorName() {
+  try {
+    const saved = localStorage.getItem("author");
+    if (saved) return saved;
+    const name = inline ? null : prompt("Your name?");
+    if (name) localStorage.setItem("author", name);
+    return name || "anonymous";
+  } catch {
+    return "anonymous";
+  }
+}
+const author = authorName();
 
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
 // Register the pm: descriptor so pm:Meta in extensionElements is typed (read and written back as-is).
 const modeler: any = new BpmnModeler({ container: "#canvas", moddleExtensions: { pm: processMeta } });
 
+let backend: Backend = restBackend;
+let id: string | null = params.get("id");
 let version = 0;
 let comments: any[] = [];
 let issues: any[] = [];
 let selected: string | null = null;
 let saving: number | undefined;
+let dirty = false; // local edits not saved yet
 
 async function load() {
-  const r = await fetch(`/api/diagrams/${id}`);
-  const d = await r.json();
+  const { status: code, body: d } = await backend.load(id!);
+  if (code !== 200) return status(`Cannot load diagram: ${d.error}`);
   version = d.version;
   comments = d.comments;
   issues = d.issues ?? [];
   const { warnings } = await modeler.importXML(d.xml);
   if (warnings.length) console.warn("import warnings", warnings);
   modeler.get("canvas").zoom("fit-viewport");
+  dirty = false;
   status(`v${version} loaded`);
   render();
 }
 
 function status(msg: string) {
   $("#status").textContent = msg;
+}
+
+const openRequests = () => comments.filter((c) => c.status === "open" && c.kind === "ai-request");
+
+function askClaudeButton() {
+  const b = document.createElement("button");
+  b.textContent = "Ask Claude to apply now";
+  b.title = "Posts a message in the conversation asking Claude to process the open AI requests";
+  b.onclick = async () => {
+    await backend.askHost?.(
+      `Please process the open AI requests on BPMN diagram ${id} (bpmn-collab): apply each one on its element, reply to it, then resolve it.`,
+    );
+    status("Request sent to Claude");
+  };
+  return b;
 }
 
 function render() {
@@ -52,6 +85,11 @@ function render() {
     }
   }
   renderIssues();
+
+  const ask = $("#ask");
+  ask.innerHTML = "";
+  if (backend.canMessageHost && openRequests().length) ask.appendChild(askClaudeButton());
+
   const list = $("#list");
   list.innerHTML = "";
   comments
@@ -80,12 +118,8 @@ function render() {
         b.textContent = "Close";
         b.title = "Close this comment without any AI action";
         b.onclick = async () => {
-          const r = await fetch(`/api/diagrams/${id}/comments/${c.id}`, {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ status: "resolved", author }),
-          });
-          if (r.ok) Object.assign(c, await r.json());
+          const r = await backend.setCommentStatus(id!, c.id, "resolved", author);
+          if (r.status === 200) Object.assign(c, r.body);
           render();
         };
         div.appendChild(b);
@@ -115,23 +149,21 @@ function renderIssues() {
 }
 
 async function save() {
+  saving = undefined;
   const { xml } = await modeler.saveXML({ format: true });
-  const r = await fetch(`/api/diagrams/${id}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ xml, baseVersion: version, author }),
-  });
-  if (r.status === 409) return status("Conflict: the AI saved a newer version. Reload the page.");
-  const body = await r.json();
-  issues = body.issues ?? [];
+  const r = await backend.save(id!, xml, version, author);
+  if (r.status === 409) return status("Conflict: the AI saved a newer version. Reload to get it (your last edit is not saved).");
+  issues = r.body.issues ?? [];
   renderIssues();
-  if (!r.ok) return status(`Not saved: ${body.error}`);
-  version = body.version;
+  if (r.status !== 200) return status(`Not saved: ${r.body.error}`);
+  version = r.body.version;
+  dirty = false;
   status(`Saved v${version}`);
 }
 
 modeler.on("commandStack.changed", () => {
   clearTimeout(saving);
+  dirty = true;
   status("Editing…");
   saving = window.setTimeout(save, 1500); // debounce
 });
@@ -145,30 +177,36 @@ modeler.on("selection.changed", ({ newSelection }: any) => {
 $("#add").onclick = async () => {
   const text = ($("#txt") as HTMLTextAreaElement).value.trim();
   if (!selected || !text) return;
-  const r = await fetch(`/api/diagrams/${id}/comments`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ elementId: selected, text, author, kind: ($("#for-ai") as HTMLInputElement).checked ? "ai-request" : "note" }),
-  });
-  const body = await r.json();
-  if (!r.ok) return status(`Comment rejected: ${body.error}`);
-  comments.push(body);
+  const kind = ($("#for-ai") as HTMLInputElement).checked ? "ai-request" : "note";
+  const r = await backend.addComment(id!, { elementId: selected, text, author, kind });
+  if (r.status !== 200) return status(`Comment rejected: ${r.body.error}`);
+  comments.push(r.body);
   ($("#txt") as HTMLTextAreaElement).value = "";
   render();
 };
 
-// Pick up comments resolved by the AI and newer revisions without reloading the canvas.
+/** Pick up comments resolved by the AI and newer revisions; reload them when nothing local is pending. */
 async function poll() {
-  const r = await fetch(`/api/diagrams/${id}`);
-  if (!r.ok) return;
-  const d = await r.json();
-  comments = d.comments;
+  const r = await backend.load(id!);
+  if (r.status !== 200) return;
+  comments = r.body.comments;
   render();
-  if (d.version > version) status(`v${d.version} saved by ${d.lastAuthor ?? "someone else"}: reload to see it`);
+  if (r.body.version <= version) return;
+  if (!dirty) await load();
+  else status(`v${r.body.version} saved by ${r.body.lastAuthor ?? "someone else"}: reload to see it`);
 }
 
-if (!id) status("Missing ?id=");
-else {
-  load();
+async function start() {
+  if (inline) {
+    status("Connecting to Claude…");
+    const app = await appBackend();
+    backend = app.backend;
+    $("#hint").textContent = "Tick “Request for the AI”, then “Ask Claude to apply now” to send it to the conversation.";
+    id = await app.diagramId;
+  }
+  if (!id) return status("Missing ?id=");
+  await load();
   setInterval(poll, 10_000);
 }
+
+start().catch((e) => status(`Error: ${e.message ?? e}`));

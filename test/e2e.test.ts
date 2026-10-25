@@ -1,8 +1,10 @@
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createApp } from "../src/app.js";
 import { Store } from "../src/store.js";
 import { fixture, edit } from "./helpers.js";
@@ -12,7 +14,10 @@ let base: string;
 let client: Client;
 
 beforeAll(async () => {
-  const app = createApp({ store: new Store(), publicUrl: "http://canvas.test" });
+  // A stand-in for the built canvas so the ui:// resource can be served without a UI build.
+  const uiDir = fs.mkdtempSync(path.join(os.tmpdir(), "bpmn-ui-"));
+  fs.writeFileSync(path.join(uiDir, "index.html"), "<!doctype html><title>canvas</title>");
+  const app = createApp({ store: new Store(), publicUrl: "http://canvas.test", uiDir });
   server = await new Promise<Server>((ok) => {
     const s = app.listen(0, "127.0.0.1", () => ok(s));
   });
@@ -48,12 +53,39 @@ describe("MCP over streamable HTTP", () => {
     id = body.id;
   });
 
-  it("lists the tools", async () => {
+  it("lists the tools; canvas tools are app-only, create/get show the inline canvas", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      "add_comment", "create_diagram", "export_diagram", "get_changes_since", "get_diagram",
+      "add_comment", "canvas_add_comment", "canvas_load", "canvas_save", "canvas_set_comment_status",
+      "create_diagram", "export_diagram", "get_changes_since", "get_diagram",
       "list_comments", "list_diagrams", "resolve_comment", "update_diagram", "validate_diagram",
     ]);
+    const meta = (name: string) => (tools.find((t) => t.name === name)?._meta as any)?.ui;
+    expect(meta("create_diagram")).toEqual({ resourceUri: "ui://bpmn-collab/canvas.html" });
+    expect(meta("get_diagram")).toEqual({ resourceUri: "ui://bpmn-collab/canvas.html" });
+    for (const t of tools.filter((t) => t.name.startsWith("canvas_"))) expect(meta(t.name).visibility).toEqual(["app"]);
+    expect(meta("update_diagram")).toBeUndefined();
+  });
+
+  it("serves the canvas as an MCP Apps resource", async () => {
+    const r: any = await client.readResource({ uri: "ui://bpmn-collab/canvas.html" });
+    expect(r.contents[0]).toMatchObject({ uri: "ui://bpmn-collab/canvas.html", mimeType: "text/html;profile=mcp-app" });
+    expect(r.contents[0].text).toContain("<title>canvas</title>");
+  });
+
+  it("canvas tools save as the human, with the same rules as the REST API", async () => {
+    const loaded = await call("canvas_load", { id });
+    expect(loaded.body).toMatchObject({ version: 1, issues: [] });
+
+    const saved = await call("canvas_save", { id, xml: fixture("invalid.bpmn"), baseVersion: 1, author: "ana" });
+    expect(saved.body.version).toBe(2); // parsable with errors: kept
+    expect((await call("canvas_save", { id, xml: "<nope", baseVersion: 2 })).body).toMatchObject({ ok: false, status: 400 });
+    expect((await call("get_diagram", { id })).body.lastAuthor).toBe("human:ana");
+
+    const c = await call("canvas_add_comment", { id, elementId: "Task_Unnamed", text: "Name it", kind: "ai-request", author: "ana" });
+    expect(c.body).toMatchObject({ kind: "ai-request", author: "human:ana" });
+    const closed = await call("canvas_set_comment_status", { id, commentId: c.body.id, status: "resolved", author: "ana" });
+    expect(closed.body).toMatchObject({ status: "resolved", resolvedBy: "human:ana" });
   });
 
   it("create_diagram returns id, version and canvas URL; rejects XML with errors", async () => {
@@ -123,6 +155,18 @@ describe("MCP over streamable HTTP", () => {
     expect((await call("list_comments", { id, onlyOpen: true })).body).toEqual([]);
 
     expect((await call("resolve_comment", { id, commentId: "nope" })).isError).toBe(true);
+  });
+});
+
+describe("HTTP hardening", () => {
+  it("rejects requests whose Host header is not allowed (DNS rebinding)", async () => {
+    const { request } = await import("node:http");
+    const status = await new Promise<number>((ok, ko) => {
+      const r = request(`${base}/api/diagrams/x`, { headers: { host: "evil.example" } }, (res) => ok(res.statusCode ?? 0));
+      r.on("error", ko);
+      r.end();
+    });
+    expect(status).toBe(403);
   });
 });
 

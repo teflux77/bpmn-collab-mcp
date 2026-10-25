@@ -10,8 +10,13 @@
 ## Two-way sync
 
 ```
-Claude ──MCP──▶ server (source of truth: revisions + comments) ◀──REST── bpmn-js canvas (human)
+Claude ──MCP──▶ server (source of truth: revisions + comments) ◀──REST── bpmn-js canvas (human, standalone page)
+                  ▲
+                  └──app-only canvas_* tools── same canvas rendered inline by Claude (MCP Apps)
 ```
+
+- MCP: SDK v2, `createMcpHandler` (one server per request; 2026-07-28 protocol plus stateless fallback for 2025 clients), Host header validation against DNS rebinding.
+- Human operations (`src/human.ts`) are shared by the REST API and the app-only tools, so both paths apply the same save rule.
 
 - Every save carries `baseVersion`; a mismatch is a 409 and the writer must re-read and merge.
 - Human edits are debounced (`commandStack.changed`) and saved as `human:<name>` revisions.
@@ -38,7 +43,7 @@ References worth reading: APQC PCF, ArchiMate (Value Stream / Business Process),
 
 ## Known gaps in this skeleton
 
-- MCP Apps (`ui://`) inline rendering is not wired yet; the canvas is a separate page.
+- MCP Apps: the inline canvas is wired (ext-apps 2.x on MCP SDK v2) but only testable in a host that renders apps, which needs a public HTTPS URL.
 - No authentication, in-memory + JSON file persistence.
 - bpmn-js-differ 3.2.0 does not track artifacts outside collaborations, ignores `extensionElements`, passes oldValue/newValue swapped, and throws when DI references a deleted element: `src/diff.ts` compensates (ids, artifacts, `pm:`, values read from both models, `partial` fallback).
 - Layout: the AI must produce BPMN DI (diagram interchange) coordinates, or an auto-layout step must be added (for example bpmn-auto-layout) before humans open the diagram.

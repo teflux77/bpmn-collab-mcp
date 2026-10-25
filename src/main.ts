@@ -8,5 +8,8 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const PUBLIC_URL = process.env.PUBLIC_URL ?? `http://localhost:${PORT}`;
 const DATA_DIR = process.env.DATA_DIR ?? path.resolve("data");
 
-const app = createApp({ store: new Store(DATA_DIR), publicUrl: PUBLIC_URL });
+// Comma-separated extra Host names to accept (e.g. behind a reverse proxy).
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim()).filter(Boolean);
+
+const app = createApp({ store: new Store(DATA_DIR), publicUrl: PUBLIC_URL, allowedHosts: ALLOWED_HOSTS });
 app.listen(PORT, HOST, () => console.log(`bpmn-collab-mcp listening on http://${HOST}:${PORT} (data: ${DATA_DIR})`));
