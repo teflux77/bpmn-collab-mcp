@@ -12,7 +12,12 @@ npm test              # vitest: unit + MCP end-to-end (no build needed)
 npm start             # node dist/main.js on http://127.0.0.1:7860
 npm run dev           # tsx watch (server only; run build:ui once for the canvas)
 npm run smoke         # scripted check against a running server
+npm run dns           # Gandi DNS for bpmn.teflux.dev (dry-run; -- --apply to change)
+npm run firewall      # Hetzner firewall (dry-run; -- --apply to change)
+npm run teardown      # remove DNS records + firewall (dry-run; -- --apply)
 ```
+
+Deployment: `docs/deploy.md` (VPS + Caddy + GHCR, pull-based updates by a timer on the VPS). Deployment scripts read secrets from `.env.local` (ignored, unreadable by Claude Code via `.claude/settings.json`) and never print them; any `--apply`, SSH or push needs explicit approval.
 
 Environment: `PORT` (7860), `HOST` (127.0.0.1; containers use 0.0.0.0), `PUBLIC_URL`, `DATA_DIR` (./data), `ALLOWED_HOSTS` (extra Host names, comma-separated).
 Register locally in Claude Code: `claude mcp add --transport http bpmn http://localhost:7860/mcp`.

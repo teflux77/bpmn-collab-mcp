@@ -1,0 +1,37 @@
+# bpmn-collab-mcp
+# - /mcp: only Anthropic's outbound range (ANTHROPIC_EGRESS) and the admin IP; others get 403.
+#   Provisional until OAuth (docs/oauth-plan.md).
+# - everything else (canvas, REST API, assets): HTTP basic auth.
+{$BPMN_HOST} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# OAuth discovery probes from MCP clients follow the same rule: the app answers 404 (no OAuth yet)
+	# instead of a basic-auth 401 that would confuse the connector setup.
+	@mcp path /mcp /mcp/* /.well-known/oauth-*
+	handle @mcp {
+		@allowed remote_ip {$ANTHROPIC_EGRESS} {$ADMIN_IP}
+		handle @allowed {
+			reverse_proxy app:7860
+		}
+		respond "Forbidden" 403
+	}
+
+	handle {
+		basic_auth {
+			{$CANVAS_USER} {$CANVAS_HASH}
+		}
+		reverse_proxy app:7860
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

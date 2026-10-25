@@ -1,0 +1,8 @@
+# Global options. Certificates: Let's Encrypt, HTTP-01 (port 80), no DNS credentials on the server.
+# A wildcard certificate would need DNS-01 with the Gandi plugin: see docs/deploy.md (not used).
+{
+	email {$ACME_EMAIL}
+}
+
+# One file per subdomain.
+import sites/*.caddy

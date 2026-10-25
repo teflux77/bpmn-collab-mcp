@@ -15,7 +15,10 @@
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
     "test": "vitest run",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "dns": "node --env-file-if-exists=.env.local scripts/dns.mjs",
+    "firewall": "node --env-file-if-exists=.env.local scripts/hetzner.mjs",
+    "teardown": "node --env-file-if-exists=.env.local scripts/teardown.mjs"
   },
   "dependencies": {
     "@miragon/bpmnlint-plugin-rules": "0.17.0",

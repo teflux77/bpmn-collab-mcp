@@ -55,10 +55,9 @@ npx @modelcontextprotocol/inspector
 
 ## Deploying
 
-- **Hugging Face Spaces (PoC/demo):** create a Docker Space, push this repo (the front matter above is already set). Free Spaces sleep when idle and storage is ephemeral unless you attach persistent storage. Fine for a demo, not for anything you depend on.
-- **Anywhere else:** the `Dockerfile` is plain; run it on any container host and set `PUBLIC_URL` and `DATA_DIR`.
+Production runs on a VPS behind Caddy (HTTPS), with GitHub Actions publishing the image to GHCR and a pull-based update on the server: see [`docs/deploy.md`](docs/deploy.md). `/mcp` is restricted to Anthropic's egress range and the admin IP, the canvas and API sit behind basic auth, until OAuth ([`docs/oauth-plan.md`](docs/oauth-plan.md)).
 
-There is no authentication yet. Do not expose it publicly with real data.
+The `Dockerfile` is plain and also runs elsewhere (set `PUBLIC_URL`, `DATA_DIR`, and `ALLOWED_HOSTS` when behind a proxy with another host name).
 
 ## Roadmap
 
