@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build:ui": "vite build --config ui/vite.config.ts",
-    "build:server": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/moddle','dist/moddle',{recursive:true})\"",
+    "build:server": "tsc -p tsconfig.json && node -e \"const fs=require('fs');fs.cpSync('src/moddle','dist/moddle',{recursive:true});fs.cpSync('skill','dist/skill',{recursive:true})\"",
     "build": "npm run build:ui && npm run build:server",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "start": "node dist/main.js",

@@ -38,7 +38,7 @@ Register locally in Claude Code: `claude mcp add --transport http bpmn http://lo
 - `src/diff.ts`: `get_changes_since` on bpmn-js-differ, compensated for its gaps (artifacts, `pm:`, swapped values, crash on dangling DI).
 - `src/autolayout.ts`: bpmn-auto-layout + completion pass, only for AI XML without DI and before any human edit.
 - `ui/`: bpmn-js Modeler (unmodified) with `pm:` moddle extension; `ui/backend.ts` picks REST (standalone) or MCP Apps tools (inline in Claude); `ui/comments-view.ts`: pure logic of the comment overlays (filters, previews, orphans, bubble placement, prefs, SVG export), unit-tested without a browser.
-- `skill/SKILL.md`: guidance for the AI using the server (workflow, modeling and layout conventions). `docs/architecture.md`: design notes.
+- `skill/SKILL.md`: guidance for the AI using the server (workflow, modeling and layout conventions). Sent as the MCP server **instructions** at every connection (`src/instructions.ts`; the build copies it to `dist/skill/`), so no skill needs to be installed in Claude: edit this file to change what the model is told. `docs/architecture.md`: design notes.
 
 ## Conventions
 

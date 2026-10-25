@@ -9,6 +9,7 @@ import { diffXml } from "./diff.js";
 import { checkAnchor, commentFromHuman, loadForHuman, renameDiagram, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { autoLayout, hasDi } from "./autolayout.js";
 import { exportFileName, type ExportSigner } from "./export.js";
+import { instructions } from "./instructions.js";
 import { guardAiSave, openIssues, summarize, triage } from "./issues.js";
 import { currentIssues, dismissIssue, listIssues, restoreIssue } from "./triage.js";
 import { parse } from "./model.js";
@@ -63,7 +64,8 @@ export function downloadLink(signer: ExportSigner, publicUrl: string, id: string
 }
 
 export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
-  const s = new McpServer({ name: "bpmn-collab-mcp", version: "0.1.0" });
+  // The modeling guide (skill/SKILL.md) travels with the server: no skill needs to be installed in Claude.
+  const s = new McpServer({ name: "bpmn-collab-mcp", version: "0.1.0" }, { instructions });
 
   s.registerTool(
     "list_diagrams",

@@ -46,6 +46,9 @@ npx @modelcontextprotocol/inspector
 
 ## MCP tools
 
+The modeling guide (`skill/SKILL.md`) is sent to the client as the server instructions at connection: Claude follows it without installing any skill.
+
+
 | Tool | Purpose |
 |---|---|
 | `create_diagram` / `list_diagrams` / `rename_diagram` | Start, list (most recent first, with each web `canvasUrl`) or rename diagrams |

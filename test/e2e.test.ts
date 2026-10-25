@@ -68,6 +68,14 @@ describe("MCP over streamable HTTP", () => {
     expect(meta("update_diagram")).toBeUndefined();
   });
 
+  it("sends the modeling guide (skill/SKILL.md) as server instructions", async () => {
+    const text = client.getInstructions() ?? "";
+    expect(text).toMatch(/^bpmn-collab: collaborative BPMN 2\.0 modeling/);
+    expect(text).toContain("## Pools, lanes and diagram types");
+    expect(text).toContain("## Lint issues: triage, never loop");
+    expect(text).not.toMatch(/^---|\ndescription:/); // front matter stripped
+  });
+
   it("serves the canvas as an MCP Apps resource", async () => {
     const r: any = await client.readResource({ uri: "ui://bpmn-collab/canvas.html" });
     expect(r.contents[0]).toMatchObject({ uri: "ui://bpmn-collab/canvas.html", mimeType: "text/html;profile=mcp-app" });
