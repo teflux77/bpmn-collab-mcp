@@ -4,6 +4,7 @@ import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import "diagram-js-minimap/assets/diagram-js-minimap.css";
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import minimapModule from "diagram-js-minimap";
+import typeColorsModule from "./type-colors";
 import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
 import { contentBox, fitViewbox, needsRefit } from "./view";
@@ -38,7 +39,7 @@ const modeler: any = new BpmnModeler({
   container: "#canvas",
   moddleExtensions: { pm: processMeta },
   // Official bpmn.io minimap: the viewport rectangle can be dragged to scroll the diagram.
-  additionalModules: [minimapModule],
+  additionalModules: [minimapModule, typeColorsModule], // + events and gateways coloured by type
   minimap: { open: true },
 });
 // Shown at the bottom of the side panel, not over the canvas (it positions itself from its own element).

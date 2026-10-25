@@ -32,6 +32,11 @@
       /* the map frame stands for the whole diagram; the module's translucent overlay stays above it */
       #minimap-slot .djs-minimap .map { width: 220px; height: 130px; background: #eef1f4; }
       #minimap-slot .djs-minimap .map svg > g:first-child { display: none; } /* no drawing of the diagram */
+      /* Palette icons in the type colours of the canvas (ui/type-colors-map.ts, darker for icon strokes) */
+      .djs-palette .entry.bpmn-icon-start-event-none { color: #2b8a3e; }
+      .djs-palette .entry.bpmn-icon-end-event-none { color: #c92a2a; }
+      .djs-palette .entry.bpmn-icon-intermediate-event-none { color: #e8590c; }
+      .djs-palette .entry.bpmn-icon-gateway-none { color: #e6a700; }
       #orphans { border: 1px dashed #c92a2a; border-radius: 6px; padding: 4px 6px; margin: 6px 0; }
       @media (max-width: 760px) {
         #app { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; min-height: 100%; }
