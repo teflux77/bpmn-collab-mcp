@@ -4,6 +4,11 @@
 
 export const APPLY = process.argv.includes("--apply");
 
+// Names used in .env.local, with the earlier names accepted as fallbacks.
+for (const [name, fallback] of [["VPS_IPV4", "VPS_IP"], ["MY_IP", "ADMIN_IP"]]) {
+  if (!process.env[name]?.trim() && process.env[fallback]?.trim()) process.env[name] = process.env[fallback];
+}
+
 /** Returns the named variables or exits listing the missing ones (names only, never values). */
 export function requireEnv(...names) {
   const missing = names.filter((n) => !process.env[n]?.trim());

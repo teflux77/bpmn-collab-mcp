@@ -1,19 +1,22 @@
-// Hetzner Cloud firewall for the VPS: 80/443 open, 22 only from ADMIN_IP, everything else closed.
-// Finds the server by VPS_IP, creates or updates the firewall, applies it. Re-run after your IP changes.
+// Hetzner Cloud firewall for the VPS: 80/443 open, SSH (SSH_PORT, default 22) only from MY_IP,
+// everything else closed. Finds the server by VPS_IPV4 (or HETZNER_SERVER_NAME), creates or updates
+// the firewall, applies it. Re-run after your IP changes.
 // Usage: npm run firewall [-- --apply]
 import { APPLY, api, banner, fail, requireEnv } from "./lib.mjs";
 
-const { HCLOUD_TOKEN, VPS_IP, ADMIN_IP } = requireEnv("HCLOUD_TOKEN", "VPS_IP", "ADMIN_IP");
+const { HCLOUD_TOKEN, VPS_IPV4, MY_IP } = requireEnv("HCLOUD_TOKEN", "VPS_IPV4", "MY_IP");
+const SSH_PORT = String(Number(process.env.SSH_PORT) || 22);
+const SERVER_NAME = process.env.HETZNER_SERVER_NAME?.trim();
 const NAME = process.env.FIREWALL_NAME?.trim() || "web-ssh-admin";
 const BASE = "https://api.hetzner.cloud/v1";
 const call = (method, path, body) => api(BASE, HCLOUD_TOKEN, method, path, body);
 
 const ANY = ["0.0.0.0/0", "::/0"];
-const adminCidr = ADMIN_IP.includes("/") ? ADMIN_IP : ADMIN_IP.includes(":") ? `${ADMIN_IP}/128` : `${ADMIN_IP}/32`;
+const adminCidr = MY_IP.includes("/") ? MY_IP : MY_IP.includes(":") ? `${MY_IP}/128` : `${MY_IP}/32`;
 const rules = [
   { direction: "in", protocol: "tcp", port: "80", source_ips: ANY, description: "HTTP (Let's Encrypt HTTP-01, redirect)" },
   { direction: "in", protocol: "tcp", port: "443", source_ips: ANY, description: "HTTPS" },
-  { direction: "in", protocol: "tcp", port: "22", source_ips: [adminCidr], description: "SSH from admin IP only" },
+  { direction: "in", protocol: "tcp", port: SSH_PORT, source_ips: [adminCidr], description: "SSH from MY_IP only" },
 ];
 
 banner();
@@ -21,13 +24,23 @@ banner();
 const servers = await call("GET", "/servers?per_page=50");
 if (servers.status === 401 || servers.status === 403) fail("Hetzner refused the token (wrong project or read-only).");
 if (!servers.ok) fail(`Cannot list servers (HTTP ${servers.status})`, servers.json);
-const server = servers.json.servers.find((s) => s.public_net?.ipv4?.ip === VPS_IP);
-if (!server) fail(`No server with IPv4 ${VPS_IP} in this Hetzner project.`);
+const server = servers.json.servers.find((s) => (SERVER_NAME ? s.name === SERVER_NAME : s.public_net?.ipv4?.ip === VPS_IPV4));
+if (!server) fail(`No server ${SERVER_NAME ? `named ${SERVER_NAME}` : `with IPv4 ${VPS_IPV4}`} in this Hetzner project.`);
+if (server.public_net?.ipv4?.ip !== VPS_IPV4) fail(`Server ${server.name} has IPv4 ${server.public_net?.ipv4?.ip}, not VPS_IPV4 ${VPS_IPV4}: fix .env.local.`);
 const v6 = server.public_net?.ipv6?.ip; // a /64 network, e.g. 2a01:4f8:x:y::/64
 console.log(`Server: ${server.name} (id ${server.id}, ${server.server_type?.name}), IPv6 network: ${v6 ?? "none"}`);
 if (v6) console.log(`  VPS_IPV6 to use for DNS: ${v6.replace(/\/64$/, "").replace(/::$/, "::1")}`);
 
+const attached = server.public_net?.firewalls ?? [];
 const existing = (await call("GET", `/firewalls?name=${encodeURIComponent(NAME)}`)).json?.firewalls?.[0];
+const others = attached.filter((f) => f.id !== existing?.id);
+if (others.length) {
+  // Hetzner combines the rules of all attached firewalls: another one could re-open what this one closes.
+  for (const f of others) {
+    const o = (await call("GET", `/firewalls/${f.id}`)).json?.firewall;
+    console.log(`! other firewall attached: "${o?.name}" (id ${f.id}): ${(o?.rules ?? []).map((r) => `${r.protocol}/${r.port ?? "*"} from ${(r.source_ips ?? []).join(",")}`).join("; ") || "no rules"}`);
+  }
+} else console.log("  no other firewall attached to the server");
 const applied = existing?.applied_to?.some((a) => a.type === "server" && a.server?.id === server.id);
 
 const normalize = (rs) =>
