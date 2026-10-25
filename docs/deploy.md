@@ -33,7 +33,7 @@ Anthropic's outbound range is `160.79.104.0/21` (checked 2026-10-25 on https://p
 
 ## First deployment (in this order)
 
-0. **Prerequisites**: tests green (`npm test`), `gh auth login` done, `.env.local` filled: `GANDI_PAT`, `HCLOUD_TOKEN`, `VPS_IP`, `ADMIN_IP` (and `VPS_IPV6`, printed by step 2).
+0. **Prerequisites**: tests green (`npm test`), `gh auth login` done, `.env.local` filled: `GANDI_PAT`, `HCLOUD_TOKEN`, `VPS_IPV4`, `MY_IP`, optional `VPS_IPV6` (printed by step 2; a /64 is turned into ::1), `SSH_PORT` (22), `DNS_TTL` (300). The older names `VPS_IP` / `ADMIN_IP` from `.env.example` are accepted too.
 1. **GitHub**: create the public repo and push `main` (CI builds the image). The GHCR package inherits the public visibility of the repo; check that an anonymous pull works (`docker pull ghcr.io/teflux77/bpmn-collab-mcp:latest` logged out). If it does not: GitHub → your profile → Packages → `bpmn-collab-mcp` → Package settings → Change visibility → Public. (A private package would need a read token on the VPS.)
 2. **Firewall**: `npm run firewall` (dry-run, also prints the IPv6 to use), then `npm run firewall -- --apply`.
 3. **DNS**: `npm run dns` (dry-run; checks the delegation to LiveDNS), then `npm run dns -- --apply`. Check: `nslookup bpmn.teflux.dev`.
@@ -69,7 +69,8 @@ In Claude (web/Desktop): Settings → Connectors → Add custom connector → `h
 
 - **Deploy**: push to `main`. CI runs the tests and publishes `latest` + `sha-<commit>`; the VPS picks it up within ~2 minutes (`journalctl -u bpmn-update`). Changes under `deploy/` are applied the same way (Caddy is reloaded when its configuration changes).
 - **Rollback**: on the VPS set `APP_TAG=sha-<previous commit>` in `/opt/bpmn-collab/.env`, then `sudo systemctl start bpmn-update` (or wait 2 min). Set it back to `latest` once fixed. Tags: GitHub → Packages → bpmn-collab-mcp.
-- **Your IP changed**: update `ADMIN_IP` in `.env.local`, run `npm run firewall -- --apply` (works from anywhere: it only needs the Hetzner token); update `ADMIN_IP` in the server env file for `/mcp`. If you are locked out of SSH: Hetzner Console → server → Console (web VNC) or Rescue.
+- **IPv6**: `bpmn.teflux.dev` has an AAAA record. If your own connection gets IPv6 one day, your requests to `/mcp` will arrive from your IPv6 address: add it next to the IPv4 in the server's `ADMIN_IP` (space-separated) or `/mcp` answers 403. SSH by IPv4 literal (`ssh deploy@<VPS_IPV4>`) is unaffected.
+- **Your IP changed**: update `MY_IP` in `.env.local`, run `npm run firewall -- --apply` (works from anywhere: it only needs the Hetzner token); update `ADMIN_IP` in the server env file for `/mcp`. If you are locked out of SSH: Hetzner Console → server → Console (web VNC) or Rescue.
 - **Canvas password**: `scripts/server/set-canvas-password.sh` on the VPS, then `docker compose ... up -d caddy`.
 - **Backups**: daily at 03:30 UTC, `/opt/bpmn-collab/backups/bpmn-data-*.tgz`, 7 days kept. They live on the same VPS: copy them off-site from time to time (`scp deploy@<VPS_IP>:/opt/bpmn-collab/backups/* .`) or enable Hetzner backups/snapshots.
   Restore: `docker compose ... stop app`, then `docker run --rm -v bpmn-collab_bpmn-data:/data -v /opt/bpmn-collab/backups:/backup alpine:3.24.3 sh -c 'rm -rf /data/* && tar xzf /backup/<file>.tgz -C /data'`, then `docker compose ... start app`.
