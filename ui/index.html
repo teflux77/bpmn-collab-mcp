@@ -7,7 +7,31 @@
     <style>
       html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
       #app { display: grid; grid-template-columns: 1fr 320px; height: 100%; }
+      #stage { position: relative; min-height: 0; }
       #canvas { height: 100%; }
+      #zoom-bar { position: absolute; top: 8px; right: 8px; z-index: 10; display: flex; gap: 2px; align-items: center;
+        background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+      #zoom-bar button { min-width: 32px; height: 30px; font-size: 14px; }
+      #zoom-level { font-size: 12px; min-width: 44px; text-align: center; color: #444; }
+      .djs-overlay-comment-bubble { pointer-events: none; }
+      .bubble { pointer-events: auto; max-width: 220px; font-size: 12px; background: #fff; border: 1px solid; border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+      .bubble.human { border-color: #e8590c; background: #fff7f0; }
+      .bubble.ai { border-color: #4c6ef5; background: #f2f5ff; }
+      .bubble.resolved { border-color: #bbb; background: #f4f4f4; color: #888; }
+      .bubble-head { padding: 3px 7px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .bubble-thread { border-top: 1px solid #ddd; padding: 4px 6px; max-height: 240px; overflow: auto; white-space: normal; }
+      .bubble-item { margin: 3px 0; }
+      .bubble-item.resolved { opacity: .6; }
+      .bubble-thread textarea { width: 100%; box-sizing: border-box; font-size: 12px; }
+      .djs-element.highlight .djs-visual > :first-child { stroke: #e8590c !important; stroke-width: 4px !important; }
+      .c small.focus { cursor: pointer; text-decoration: underline dotted; }
+      #orphans { border: 1px dashed #c92a2a; border-radius: 6px; padding: 4px 6px; margin: 6px 0; }
+      @media (max-width: 760px) {
+        #app { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; min-height: 100%; }
+        #stage { height: 62vh; }
+        #side { border-left: none; border-top: 1px solid #ddd; }
+      }
       #side { border-left: 1px solid #ddd; padding: 12px; overflow: auto; }
       #status { font-size: 12px; color: #666; margin-bottom: 8px; }
       .c { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; margin: 6px 0; font-size: 13px; }
@@ -33,12 +57,35 @@
   </head>
   <body>
     <div id="app">
-      <div id="canvas"></div>
+      <div id="stage">
+        <div id="canvas"></div>
+        <div id="zoom-bar" role="toolbar" aria-label="Zoom">
+          <button id="zoom-out" title="Zoom arrière">−</button>
+          <span id="zoom-level">100 %</span>
+          <button id="zoom-in" title="Zoom avant">+</button>
+          <button id="zoom-fit" title="Ajuster à l'écran">Ajuster</button>
+          <button id="zoom-reset" title="Taille réelle">100 %</button>
+        </div>
+      </div>
       <div id="side">
         <div id="status">Loading…</div>
         <div class="bar">
           <button id="dl-bpmn" title="Latest saved revision, standard BPMN 2.0">Télécharger .bpmn</button>
           <button id="dl-svg">Télécharger SVG</button>
+          <label class="hint"><input type="checkbox" id="svg-comments" /> inclure les commentaires (SVG)</label>
+        </div>
+        <div class="bar">
+          <label><input type="checkbox" id="c-show" checked /> Commentaires</label>
+          <select id="c-status" title="Statut">
+            <option value="open">ouverts</option>
+            <option value="resolved">résolus</option>
+            <option value="all">tous</option>
+          </select>
+          <select id="c-author" title="Auteur">
+            <option value="all">humain + IA</option>
+            <option value="human">humain</option>
+            <option value="ai">IA</option>
+          </select>
         </div>
         <div id="export-panel" hidden>
           <div class="hint" id="export-msg">Download blocked here: copy the XML and save it as a .bpmn file.</div>
@@ -56,6 +103,7 @@
         <b id="issues-title">Validation</b>
         <div id="issues"></div>
         <hr />
+        <div id="orphans" hidden></div>
         <div id="list"></div>
       </div>
     </div>

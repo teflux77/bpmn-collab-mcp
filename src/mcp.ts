@@ -311,7 +311,7 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
     {
       description: "Canvas: add a human comment or AI request.",
       inputSchema: z.object({
-        id: z.string(), elementId: z.string(), text: z.string(),
+        id: z.string(), elementId: z.string(), text: z.string(), parentId: z.string().optional(),
         kind: z.enum(["note", "ai-request"]).optional(), author: z.string().optional(),
       }),
       _meta: appOnly,

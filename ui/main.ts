@@ -5,6 +5,10 @@ import BpmnModeler from "bpmn-js/lib/Modeler";
 import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
 import { exportFileName } from "../src/filename";
+import {
+  applyOverlays, authorLabel, isAi, loadPrefs, orphans, planOverlays, preview, savePrefs, svgWithComments, thread,
+  type Bounds, type CanvasComment, type CommentPrefs, type OverlayPlan,
+} from "./comments-view";
 
 const params = new URLSearchParams(location.search);
 // Inline in an MCP Apps host: framed and opened without ?id= (the id comes from the tool call).
@@ -73,21 +77,9 @@ function askClaudeButton() {
 }
 
 function render() {
-  const overlays = modeler.get("overlays");
-  overlays.remove({ type: "comment-badge" });
-  const counts = new Map<string, number>();
-  comments.filter((c) => c.status === "open").forEach((c) => counts.set(c.elementId, (counts.get(c.elementId) ?? 0) + 1));
-  for (const [el, n] of counts) {
-    try {
-      const html = document.createElement("span");
-      html.className = "badge";
-      html.textContent = String(n);
-      overlays.add(el, "comment-badge", { position: { top: -8, right: 8 }, html });
-    } catch {
-      /* element no longer exists */
-    }
-  }
+  renderOverlays();
   renderIssues();
+  renderOrphans();
 
   const ask = $("#ask");
   ask.innerHTML = "";
@@ -102,6 +94,9 @@ function render() {
       div.className = `c ${c.status} ${c.kind}`;
       const meta = document.createElement("small");
       meta.textContent = `${c.kind === "ai-request" ? "🤖 For the AI · " : ""}${c.author} · ${c.elementId}`;
+      meta.className = "focus";
+      meta.title = "Show this element on the diagram";
+      meta.onclick = () => focusElement(c.elementId);
       const body = document.createElement("div");
       body.textContent = c.text;
       div.append(meta, body);
@@ -286,7 +281,7 @@ async function exportFile(kind: "bpmn" | "svg") {
   const { content, mime } =
     kind === "bpmn"
       ? { content: (await modeler.saveXML({ format: true })).xml as string, mime: "application/xml" }
-      : { content: (await modeler.saveSVG()).svg as string, mime: "image/svg+xml" };
+      : { content: await exportSvg(), mime: "image/svg+xml" };
   const fileName = exportFileName(diagramName, version, kind);
   if (await backend.download(fileName, mime, content)) return status(`${fileName} downloaded`);
   // Inline in a chat: the host refused or cannot download; try a signed link, then copy/paste.
@@ -298,6 +293,152 @@ $("#dl-bpmn").onclick = () => void exportFile("bpmn").catch((e) => status(`Expor
 $("#dl-svg").onclick = () => void exportFile("svg").catch((e) => status(`Export failed: ${e.message ?? e}`));
 $("#export-copy").onclick = () => void copyExportText();
 $("#export-close").onclick = () => ($("#export-panel").hidden = true);
+
+// ---- Zoom: buttons on every device (diagram-js handles Ctrl/Cmd + wheel, trackpad pinch, drag) ----
+const canvas = modeler.get("canvas");
+const showZoom = () => ($("#zoom-level").textContent = `${Math.round(canvas.zoom() * 100)} %`);
+const zoomTo = (z: number) => canvas.zoom(Math.min(4, Math.max(0.2, z)), "auto");
+$("#zoom-in").onclick = () => zoomTo(canvas.zoom() * 1.25);
+$("#zoom-out").onclick = () => zoomTo(canvas.zoom() / 1.25);
+$("#zoom-fit").onclick = () => canvas.zoom("fit-viewport", "auto");
+$("#zoom-reset").onclick = () => zoomTo(1);
+modeler.on("canvas.viewbox.changed", showZoom);
+
+/** Centres an element at a readable zoom and highlights it briefly (drills into its sub-process if needed). */
+function focusElement(elementId: string) {
+  const el = modeler.get("elementRegistry").get(elementId);
+  if (!el) return status(`Element ${elementId} no longer exists (orphan comment)`);
+  const root = canvas.findRoot?.(el);
+  if (root && root !== canvas.getRootElement()) canvas.setRootElement(root);
+  if (canvas.zoom() < 1) canvas.zoom(1);
+  canvas.scrollToElement(el, { top: 120, bottom: 120, left: 160, right: 160 });
+  modeler.get("selection").select(el);
+  canvas.addMarker(elementId, "highlight");
+  setTimeout(() => canvas.removeMarker(elementId, "highlight"), 2500);
+}
+
+// ---- Comments on the canvas (overlays attached to elements) ----
+/** localStorage may be missing or throw in a sandboxed iframe: the page works without it. */
+const storage = (() => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+})();
+let prefs: CommentPrefs = loadPrefs(storage);
+let expanded: string | null = null; // element whose thread is open in its bubble
+
+function elementBounds() {
+  const map = new Map<string, Bounds>();
+  for (const el of modeler.get("elementRegistry").getAll()) {
+    if (el.waypoints) {
+      const xs = el.waypoints.map((p: any) => p.x), ys = el.waypoints.map((p: any) => p.y);
+      map.set(el.id, { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) });
+    } else if (el.width !== undefined) map.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height });
+  }
+  return map;
+}
+
+function bubbleHtml(plan: OverlayPlan) {
+  const last = plan.comments[plan.comments.length - 1] as CanvasComment;
+  const div = document.createElement("div");
+  div.className = `bubble ${last.status === "resolved" ? "resolved" : isAi(last) ? "ai" : "human"}`;
+  // keep diagram-js from starting a drag/selection when interacting with the bubble
+  div.addEventListener("mousedown", (e) => e.stopPropagation());
+  div.addEventListener("pointerdown", (e) => e.stopPropagation());
+  const head = document.createElement("div");
+  head.className = "bubble-head";
+  head.textContent = `${authorLabel(last)} : ${preview(last.text)}${plan.comments.length > 1 ? ` (+${plan.comments.length - 1})` : ""}`;
+  head.title = "Show the thread";
+  head.onclick = () => {
+    expanded = expanded === plan.elementId ? null : plan.elementId;
+    renderOverlays();
+  };
+  div.appendChild(head);
+  if (expanded === plan.elementId) div.appendChild(threadHtml(plan.elementId));
+  return div;
+}
+
+function threadHtml(elementId: string) {
+  const box = document.createElement("div");
+  box.className = "bubble-thread";
+  for (const c of thread(comments as CanvasComment[], elementId)) {
+    const item = document.createElement("div");
+    item.className = `bubble-item ${c.status} ${isAi(c) ? "ai" : "human"}`;
+    const who = document.createElement("small");
+    who.textContent = `${authorLabel(c)}${c.parentId ? " (réponse)" : ""}${c.status === "resolved" ? " · résolu" : ""}`;
+    const body = document.createElement("div");
+    body.textContent = c.text;
+    item.append(who, body);
+    box.appendChild(item);
+  }
+  const input = Object.assign(document.createElement("textarea"), { rows: 2, placeholder: "Répondre…" });
+  const send = Object.assign(document.createElement("button"), { textContent: "Répondre" });
+  send.onclick = async () => {
+    const text = input.value.trim();
+    if (!text) return input.focus();
+    const root = thread(comments as CanvasComment[], elementId).find((c) => !c.parentId);
+    const kind = ($("#for-ai") as HTMLInputElement).checked ? "ai-request" : "note";
+    const r = await backend.addComment(id!, { elementId, text, author, kind, parentId: root?.id });
+    if (r.status !== 200) return status(`Reply rejected: ${r.body.error}`);
+    comments.push(r.body);
+    render();
+  };
+  box.append(input, send);
+  return box;
+}
+
+function renderOverlays() {
+  applyOverlays(modeler.get("overlays"), planOverlays(comments as CanvasComment[], prefs, elementBounds()), bubbleHtml);
+}
+
+function renderOrphans() {
+  const gone = orphans(comments as CanvasComment[], new Set(elementBounds().keys()));
+  const box = $("#orphans");
+  box.innerHTML = "";
+  box.hidden = !gone.length;
+  if (!gone.length) return;
+  const title = document.createElement("b");
+  title.textContent = `Commentaires orphelins (${gone.length})`;
+  box.appendChild(title);
+  for (const c of gone) {
+    const div = document.createElement("div");
+    div.className = `c ${c.status}`;
+    div.textContent = `${authorLabel(c)} · ancien élément ${c.elementId} : ${c.text}`;
+    box.appendChild(div);
+  }
+}
+
+// Bubbles follow their element natively; offsets between neighbours are recomputed after a change.
+let relayout: number | undefined;
+modeler.on("elements.changed", () => {
+  clearTimeout(relayout);
+  relayout = window.setTimeout(() => {
+    renderOverlays();
+    renderOrphans();
+  }, 150);
+});
+modeler.on("root.set", () => renderOverlays());
+
+function applyPrefs(next: CommentPrefs) {
+  prefs = next;
+  savePrefs(storage, prefs);
+  renderOverlays();
+}
+($("#c-show") as HTMLInputElement).checked = prefs.show;
+($("#c-status") as HTMLSelectElement).value = prefs.status;
+($("#c-author") as HTMLSelectElement).value = prefs.author;
+$("#c-show").onchange = (e) => applyPrefs({ ...prefs, show: (e.target as HTMLInputElement).checked });
+$("#c-status").onchange = (e) => applyPrefs({ ...prefs, status: (e.target as HTMLSelectElement).value as CommentPrefs["status"] });
+$("#c-author").onchange = (e) => applyPrefs({ ...prefs, author: (e.target as HTMLSelectElement).value as CommentPrefs["author"] });
+
+async function exportSvg() {
+  const { svg } = await modeler.saveSVG();
+  if (!($("#svg-comments") as HTMLInputElement).checked) return svg as string;
+  const bounds = elementBounds();
+  return svgWithComments(svg, planOverlays(comments as CanvasComment[], { ...prefs, show: true }, bounds), bounds);
+}
 
 async function start() {
   if (inline) {

@@ -17,7 +17,7 @@ export interface Backend {
   readonly canMessageHost: boolean;
   load(id: string): Promise<Result>;
   save(id: string, xml: string, baseVersion: number, author: string): Promise<Result>;
-  addComment(id: string, c: { elementId: string; text: string; kind: string; author: string }): Promise<Result>;
+  addComment(id: string, c: { elementId: string; text: string; kind: string; author: string; parentId?: string }): Promise<Result>;
   setCommentStatus(id: string, commentId: string, status: "open" | "resolved", author: string): Promise<Result>;
   askHost?(text: string): Promise<void>;
   /** Saves a file on the user's device; false when the environment refused it. */
