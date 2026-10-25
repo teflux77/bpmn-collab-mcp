@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.p12)",
+      "Read(**/id_ed25519*)",
+      "Read(**/id_rsa*)",
+      "Read(**/secrets/**)",
+      "Edit(./.env.*)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Bash(cat .env*)",
+      "Bash(type .env*)",
+      "Bash(Get-Content .env*)",
+      "Bash(printenv*)",
+      "Bash(env)",
+      "Bash(gh auth token*)",
+      "Bash(gh auth status --show-token*)"
+    ]
+  }
+}
