@@ -68,6 +68,7 @@ describe("list, create and rename diagrams (web + MCP)", () => {
   it("lists diagrams most recent first, with what the home page needs", async () => {
     const older = store.create("Older", fixture("valid.bpmn")).id;
     const newer = store.create("Newer", fixture("valid.bpmn")).id;
+    await new Promise((ok) => setTimeout(ok, 5)); // distinct timestamps: the order is by last modification
     store.update(newer, fixture("valid.bpmn"), 1, "human:ana");
     store.addComment(newer, { elementId: "Task_CheckOrder", text: "?", author: "human:ana" });
     const list = await (await fetch(`${base}/api/diagrams`)).json();

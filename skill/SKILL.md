@@ -22,7 +22,7 @@ When a level is too busy, group a coherent fragment into a **collapsed sub-proce
 - one entry and one exit, one identifiable business result, no sequence flow crossing its border elsewhere than at the entry and the exit, preferably within one lane;
 - a **message flow** that would cross the border blocks the grouping;
 - name it verb + object ("Ship order");
-- DI: the sub-process shape has `isExpanded="false"` in the parent plane; its content goes on its own plane (`bpmndi:BPMNDiagram` whose `BPMNPlane` has `bpmnElement` = the sub-process id), with complete DI that passes the layout checks.
+- DI: the sub-process shape has `isExpanded="false"` in the parent plane; its content goes on its own plane (`bpmndi:BPMNDiagram` whose `BPMNPlane` has `bpmnElement` = the sub-process id), with complete DI that passes the layout checks. **Draw each plane from the origin** (top-left element around x=100, y=100): every plane is its own page; do not stack sub-process planes below the main diagram, bpmn-js opens a plane at the origin.
 
 Nuances:
 - Do not split a short linear flow just to get under the threshold: dismiss the suggestion with that reason instead.

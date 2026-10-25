@@ -4,6 +4,7 @@ import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
+import { contentBox, needsRefit } from "./view";
 import { exportFileName } from "../src/filename";
 import {
   applyOverlays, authorLabel, isAi, loadPrefs, orphans, planOverlays, preview, savePrefs, svgWithComments, thread,
@@ -421,6 +422,15 @@ modeler.on("elements.changed", () => {
   }, 150);
 });
 modeler.on("root.set", () => renderOverlays());
+
+// Drill-down: bpmn-js opens a sub-process plane at the origin the first time; when its content is
+// drawn elsewhere (common in generated XML) the plane looks empty. Re-fit after bpmn-js's own
+// centring (lower priority), only when most of the content is out of view.
+modeler.on("root.set", 500, () => {
+  const root = canvas.getRootElement();
+  const content = contentBox(modeler.get("elementRegistry").filter((e: any) => e.parent === root));
+  if (needsRefit(canvas.viewbox(), content)) canvas.zoom("fit-viewport", "auto");
+});
 
 function applyPrefs(next: CommentPrefs) {
   prefs = next;

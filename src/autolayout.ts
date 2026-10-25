@@ -208,6 +208,21 @@ export async function autoLayout(xml: string): Promise<LayoutResult> {
   return { xml: out, notes };
 }
 
+/** bpmn-js opens a drill-down plane at the origin: shift its content so it starts at (100, 100). */
+function toOrigin(planeElements: any[]) {
+  const boxes = planeElements.flatMap((pe) => [pe.bounds, pe.label?.bounds].filter(Boolean));
+  const points = planeElements.flatMap((pe) => pe.waypoint ?? []);
+  const xs = [...boxes.map((b: Rect) => b.x), ...points.map((p: Point) => p.x)];
+  const ys = [...boxes.map((b: Rect) => b.y), ...points.map((p: Point) => p.y)];
+  if (!xs.length) return;
+  const dx = 100 - Math.min(...xs);
+  const dy = 100 - Math.min(...ys);
+  for (const o of [...boxes, ...points]) {
+    o.x = Math.round(o.x + dx);
+    o.y = Math.round(o.y + dy);
+  }
+}
+
 /**
  * bpmn-auto-layout draws collapsed sub-processes the legacy way: their content in the parent plane.
  * Move it to the sub-process's own plane (one BPMNDiagram per collapsed sub-process), the drill-down
@@ -228,6 +243,7 @@ function drillDownPlanes(m: any, defs: any) {
     const moved = host.planeElement.filter((pe: any) => children.has(pe.bpmnElement));
     if (!moved.length) continue;
     host.planeElement = host.planeElement.filter((pe: any) => !children.has(pe.bpmnElement));
+    toOrigin(moved);
     const plane = m.create("bpmndi:BPMNPlane", { id: `${sub.id}_plane`, bpmnElement: sub, planeElement: moved });
     defs.diagrams.push(m.create("bpmndi:BPMNDiagram", { id: `${sub.id}_diagram`, plane }));
   }
