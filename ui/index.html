@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BPMN canvas</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+      #app { display: grid; grid-template-columns: 1fr 320px; height: 100%; }
+      #canvas { height: 100%; }
+      #side { border-left: 1px solid #ddd; padding: 12px; overflow: auto; }
+      #status { font-size: 12px; color: #666; margin-bottom: 8px; }
+      .c { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; margin: 6px 0; font-size: 13px; }
+      .c.resolved { opacity: .5; }
+      .c small { color: #777; }
+      textarea { width: 100%; box-sizing: border-box; }
+      .i { font-size: 12px; padding: 2px 4px; cursor: default; }
+      .i[title] { cursor: pointer; }
+      .i.error { color: #c92a2a; }
+      .i.warning { color: #a65e00; }
+      .badge { background: #e8590c; color: #fff; border-radius: 10px; font-size: 11px; padding: 0 6px; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="canvas"></div>
+      <div id="side">
+        <div id="status">Loading…</div>
+        <div><b id="sel">No element selected</b></div>
+        <textarea id="txt" rows="3" placeholder="Comment on the selected element"></textarea>
+        <button id="add">Add comment</button>
+        <hr />
+        <b id="issues-title">Validation</b>
+        <div id="issues"></div>
+        <hr />
+        <div id="list"></div>
+      </div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

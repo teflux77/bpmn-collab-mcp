@@ -1,0 +1,23 @@
+{
+  "name": "ProcessMeta",
+  "uri": "https://github.com/teflux77/bpmn-collab-mcp/schema/process-meta/1.0",
+  "prefix": "pm",
+  "xml": { "tagAlias": "lowerCase" },
+  "types": [
+    {
+      "name": "Meta",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:FlowNode", "bpmn:Process"] },
+      "properties": [
+        { "name": "owner", "isAttr": true, "type": "String" },
+        { "name": "system", "isAttr": true, "type": "String" },
+        { "name": "sla", "isAttr": true, "type": "String" },
+        { "name": "kpi", "isAttr": true, "type": "String" },
+        { "name": "level", "isAttr": true, "type": "String" },
+        { "name": "formRef", "isAttr": true, "type": "String" },
+        { "name": "decisionRef", "isAttr": true, "type": "String" },
+        { "name": "businessRule", "isAttr": true, "type": "String" }
+      ]
+    }
+  ]
+}
