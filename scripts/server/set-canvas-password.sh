@@ -8,7 +8,9 @@ CADDY_IMAGE=caddy:2.11.7-alpine
 read -r -s -p "New canvas password: " pw; echo
 read -r -s -p "Repeat: " pw2; echo
 [[ -n "${pw}" && "${pw}" == "${pw2}" ]] || { echo "Passwords empty or different." >&2; exit 1; }
-hash=$(printf '%s' "${pw}" | docker run --rm -i "${CADDY_IMAGE}" caddy hash-password)
+# caddy hash-password reads one line from stdin: the trailing newline is required
+hash=$(printf '%s\n' "${pw}" | docker run --rm -i "${CADDY_IMAGE}" caddy hash-password)
+[[ "${hash}" == '$2'* ]] || { echo "Unexpected output from caddy hash-password, nothing changed." >&2; exit 1; }
 unset pw pw2
 
 tmp=$(mktemp)
