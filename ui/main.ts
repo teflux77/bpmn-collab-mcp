@@ -131,23 +131,76 @@ function render() {
     });
 }
 
+/** Reloads issues only (after a dismiss/restore), keeping the canvas as it is. */
+async function refreshIssues() {
+  const r = await backend.load(id!);
+  if (r.status === 200) issues = r.body.issues ?? [];
+  renderIssues();
+}
+
+function issueRow(i: any) {
+  const div = document.createElement("div");
+  div.className = `i ${i.severity} ${i.status}`;
+  const msg = document.createElement("span");
+  msg.textContent = `${i.severity === "error" ? "✖" : i.severity === "warning" ? "⚠" : "ℹ"} ${i.message}`;
+  if (i.elementId) {
+    msg.title = i.elementId;
+    msg.onclick = () => {
+      const el = modeler.get("elementRegistry").get(i.elementId);
+      if (el) modeler.get("selection").select(el);
+    };
+  }
+  div.appendChild(msg);
+  if (i.status === "dismissed") {
+    const why = document.createElement("small");
+    why.textContent = ` (écartée par ${i.dismissal?.author ?? "?"} : ${i.dismissal?.reason ?? ""}) `;
+    const b = document.createElement("button");
+    b.textContent = "Restaurer";
+    b.onclick = async () => {
+      const r = await backend.restoreIssue(id!, i.fingerprint);
+      if (r.status !== 200) status(`Restore failed: ${r.body.error}`);
+      await refreshIssues();
+    };
+    div.append(why, b);
+  } else if (i.severity !== "error") {
+    // errors make the model invalid: they are fixed, never dismissed
+    const b = document.createElement("button");
+    b.textContent = "Écarter";
+    b.title = "False positive or rule not relevant here";
+    b.onclick = () => {
+      const form = document.createElement("span");
+      const input = Object.assign(document.createElement("input"), { placeholder: "Raison (courte)", size: 22 });
+      const ok = Object.assign(document.createElement("button"), { textContent: "OK" });
+      ok.onclick = async () => {
+        if (!input.value.trim()) return input.focus();
+        const r = await backend.dismissIssue(id!, i.fingerprint, input.value.trim(), author);
+        if (r.status !== 200) status(`Dismiss failed: ${r.body.error}`);
+        await refreshIssues();
+      };
+      input.onkeydown = (e) => e.key === "Enter" && ok.click();
+      form.append(" ", input, ok);
+      b.replaceWith(form);
+      input.focus();
+    };
+    div.appendChild(b);
+  }
+  return div;
+}
+
 function renderIssues() {
   const box = $("#issues");
   box.innerHTML = "";
-  const shown = issues.filter((i) => i.severity !== "info");
-  $("#issues-title").textContent = shown.length ? `Validation (${shown.length})` : "Validation: OK";
-  for (const i of shown) {
-    const div = document.createElement("div");
-    div.className = `i ${i.severity}`;
-    div.textContent = `${i.severity === "error" ? "✖" : "⚠"} ${i.message}`;
-    if (i.elementId) {
-      div.title = i.elementId;
-      div.onclick = () => {
-        const el = modeler.get("elementRegistry").get(i.elementId);
-        if (el) modeler.get("selection").select(el);
-      };
-    }
-    box.appendChild(div);
+  const active = issues.filter((i) => i.status !== "dismissed" && i.severity !== "info");
+  const dismissed = issues.filter((i) => i.status === "dismissed");
+  $("#issues-title").textContent = active.length ? `Validation (${active.length})` : "Validation: OK";
+  active.forEach((i) => box.appendChild(issueRow(i)));
+  if (dismissed.length) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `Écartées (${dismissed.length})`;
+    details.appendChild(summary);
+    dismissed.forEach((i) => details.appendChild(issueRow(i)));
+    box.appendChild(details);
   }
 }
 

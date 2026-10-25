@@ -5,6 +5,8 @@
 import { Store, StoreError, type Comment } from "./store.js";
 import { validateXml } from "./validate.js";
 import { parse } from "./model.js";
+import { diffXml } from "./diff.js";
+import { triage } from "./issues.js";
 
 export interface Outcome {
   status: number;
@@ -28,7 +30,10 @@ export async function loadForHuman(store: Store, id: string): Promise<Outcome> {
   const rev = store.latest(d);
   return {
     status: 200,
-    body: { id: d.id, name: d.name, version: rev.version, lastAuthor: rev.author, xml: rev.xml, comments: d.comments, issues: await validateXml(rev.xml) },
+    body: {
+      id: d.id, name: d.name, version: rev.version, lastAuthor: rev.author, xml: rev.xml, comments: d.comments,
+      issues: triage(await validateXml(rev.xml), d.dismissed),
+    },
   };
 }
 
@@ -39,8 +44,12 @@ export async function saveFromHuman(store: Store, id: string, xml: unknown, base
   const issues = await validateXml(xml);
   if (issues.some((i) => i.rule === "xml-parse")) return { status: 400, body: { error: "XML does not parse", issues } };
   try {
+    const prev = store.get(id);
+    const before = prev ? store.latest(prev).xml : undefined;
     const rev = store.update(id, xml, baseVersion, `human:${author ?? "anonymous"}`);
-    return { status: 200, body: { version: rev.version, issues } };
+    // Remember what the human added, so the AI leaves it alone unless an issue is about it.
+    if (before) store.markHumanAdded(id, (await diffXml(before, xml)).added.map((e) => e.id));
+    return { status: 200, body: { version: rev.version, issues: triage(issues, store.get(id)?.dismissed) } };
   } catch (e) {
     return fromStoreError(e);
   }

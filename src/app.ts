@@ -8,6 +8,7 @@ import { buildMcp } from "./mcp.js";
 import { commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { mountOAuth, type OAuthConfig } from "./auth.js";
 import { ExportSigner, exportFileName } from "./export.js";
+import { dismissIssue, restoreIssue } from "./triage.js";
 
 export interface AppOptions {
   store: Store;
@@ -75,6 +76,11 @@ export function createApp(opts: AppOptions) {
     const { author, ...c } = req.body ?? {};
     send(res, await commentFromHuman(store, req.params.id, { ...c, author }));
   });
+  app.post("/api/diagrams/:id/issues/:fp/dismiss", async (req, res) =>
+    send(res, await dismissIssue(store, req.params.id, req.params.fp, req.body?.reason, `human:${req.body?.author ?? "anonymous"}`)),
+  );
+  app.post("/api/diagrams/:id/issues/:fp/restore", async (req, res) => send(res, await restoreIssue(store, req.params.id, req.params.fp)));
+
   app.patch("/api/diagrams/:id/comments/:cid", (req, res) =>
     send(res, setStatusFromHuman(store, req.params.id, req.params.cid, req.body?.status, req.body?.author)),
   );

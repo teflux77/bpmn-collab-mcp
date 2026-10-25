@@ -32,6 +32,7 @@ Register locally in Claude Code: `claude mcp add --transport http bpmn http://lo
 - `src/model.ts`: bpmn-moddle with the `pm:` extension (`src/moddle/process-meta.json`).
 - `src/validate.ts`: bpmn-moddle parse + bpmnlint (`recommended`, Miragon layout rules, project rules); severities in `src/lint/config.ts`.
 - `src/lint/rules.ts` (modeling) and `src/layout-check.ts` (DI geometry): project rules in bpmnlint format, plugin name `pm`.
+- `src/issues.ts` + `src/triage.ts`: lint issue fingerprints, dismissals (stored per diagram), and the loop guard of AI saves (reset by any human save); errors cannot be dismissed.
 - `src/diff.ts`: `get_changes_since` on bpmn-js-differ, compensated for its gaps (artifacts, `pm:`, swapped values, crash on dangling DI).
 - `src/autolayout.ts`: bpmn-auto-layout + completion pass, only for AI XML without DI and before any human edit.
 - `ui/`: bpmn-js Modeler (unmodified) with `pm:` moddle extension; `ui/backend.ts` picks REST (standalone) or MCP Apps tools (inline in Claude).

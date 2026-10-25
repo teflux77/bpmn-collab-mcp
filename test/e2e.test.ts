@@ -56,9 +56,10 @@ describe("MCP over streamable HTTP", () => {
   it("lists the tools; canvas tools are app-only, create/get show the inline canvas", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      "add_comment", "canvas_add_comment", "canvas_export_link", "canvas_load", "canvas_save", "canvas_set_comment_status",
-      "create_diagram", "export_diagram", "get_changes_since", "get_diagram",
-      "list_comments", "list_diagrams", "resolve_comment", "update_diagram", "validate_diagram",
+      "add_comment", "canvas_add_comment", "canvas_dismiss_issue", "canvas_export_link", "canvas_load", "canvas_restore_issue",
+      "canvas_save", "canvas_set_comment_status", "create_diagram", "dismiss_issue", "export_diagram", "get_changes_since",
+      "get_diagram", "list_comments", "list_diagrams", "list_issues", "resolve_comment", "restore_issue", "update_diagram",
+      "validate_diagram",
     ]);
     const meta = (name: string) => (tools.find((t) => t.name === name)?._meta as any)?.ui;
     expect(meta("create_diagram")).toEqual({ resourceUri: "ui://bpmn-collab/canvas.html" });
@@ -101,7 +102,8 @@ describe("MCP over streamable HTTP", () => {
     const warned = edit(fixture("valid.bpmn"), ['<bpmn:sequenceFlow id="Flow_No" name="No"', '<bpmn:sequenceFlow id="Flow_No"']);
     const ok = await call("update_diagram", { id, xml: warned, baseVersion: 1, note: "drop label" });
     expect(ok.body).toMatchObject({ ok: true, version: 2 });
-    expect(ok.body.issues).toEqual([expect.objectContaining({ rule: "pm/gateway-flow-label", severity: "warning" })]);
+    expect(ok.body.openIssues).toEqual([expect.objectContaining({ rule: "pm/gateway-flow-label", severity: "warning", status: "open" })]);
+    expect(ok.body.openIssues[0].fingerprint).toMatch(/^[0-9a-f]{12}$/);
 
     const bad = await call("update_diagram", { id, xml: fixture("invalid.bpmn"), baseVersion: 2 });
     expect(bad.isError).toBe(true);

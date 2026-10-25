@@ -22,6 +22,9 @@ export interface Backend {
   askHost?(text: string): Promise<void>;
   /** Saves a file on the user's device; false when the environment refused it. */
   download(fileName: string, mimeType: string, content: string): Promise<boolean>;
+  /** Sets a lint issue aside (with a reason) or restores it. */
+  dismissIssue(id: string, fingerprint: string, reason: string, author: string): Promise<Result>;
+  restoreIssue(id: string, fingerprint: string): Promise<Result>;
   /** Inline only: asks the host to open a signed download link for the latest revision. */
   openExportLink?(id: string): Promise<boolean>;
 }
@@ -43,6 +46,9 @@ const rest = async (r: Response): Promise<Result> => ({ status: r.status, body: 
 export const restBackend: Backend = {
   canMessageHost: false,
   download: async (fileName, mimeType, content) => browserDownload(fileName, mimeType, content),
+  dismissIssue: async (id, fp, reason, author) =>
+    rest(await fetch(`/api/diagrams/${id}/issues/${fp}/dismiss`, { method: "POST", headers: json, body: JSON.stringify({ reason, author }) })),
+  restoreIssue: async (id, fp) => rest(await fetch(`/api/diagrams/${id}/issues/${fp}/restore`, { method: "POST", headers: json, body: "{}" })),
   load: async (id) => rest(await fetch(`/api/diagrams/${id}`)),
   save: async (id, xml, baseVersion, author) =>
     rest(await fetch(`/api/diagrams/${id}`, { method: "PUT", headers: json, body: JSON.stringify({ xml, baseVersion, author }) })),
@@ -82,6 +88,8 @@ export async function appBackend(): Promise<{ backend: Backend; diagramId: Promi
     askHost: async (text) => {
       await app.sendMessage({ role: "user", content: [{ type: "text", text }] });
     },
+    dismissIssue: (id, fingerprint, reason, author) => call("canvas_dismiss_issue", { id, fingerprint, reason, author }),
+    restoreIssue: (id, fingerprint) => call("canvas_restore_issue", { id, fingerprint }),
     // The sandboxed iframe cannot download by itself: the host does it (with its own confirmation).
     download: async (fileName, mimeType, content) => {
       try {

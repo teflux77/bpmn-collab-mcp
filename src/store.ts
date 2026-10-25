@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PM_NS } from "./model.js";
+import type { Dismissal, GuardState } from "./issues.js";
 
 export interface Comment {
   id: string;
@@ -36,6 +37,12 @@ export interface Diagram {
   name: string;
   revisions: Revision[];
   comments: Comment[];
+  /** Lint issues set aside (false positives, rules not relevant here), by fingerprint. */
+  dismissed?: Dismissal[];
+  /** Loop guard history of AI saves; reset by any human save. */
+  guard?: GuardState;
+  /** Ids of elements a human added: the AI must not touch them unless the issue is about them. */
+  humanAdded?: string[];
 }
 
 const escapeXml = (s: string) =>
@@ -134,8 +141,40 @@ export class Store {
     }
     const rev: Revision = { version: cur.version + 1, author, xml, at: new Date().toISOString(), note };
     d.revisions.push(rev);
+    if (author.startsWith("human:")) delete d.guard; // a human answer starts a new round
     this.persist();
     return rev;
+  }
+
+  dismiss(id: string, dismissal: Dismissal) {
+    const d = this.diagrams.get(id);
+    if (!d) throw notFound(`Diagram ${id} not found`);
+    d.dismissed = [...(d.dismissed ?? []).filter((x) => x.fingerprint !== dismissal.fingerprint), dismissal];
+    this.persist();
+    return dismissal;
+  }
+
+  restore(id: string, fingerprint: string) {
+    const d = this.diagrams.get(id);
+    if (!d) throw notFound(`Diagram ${id} not found`);
+    const before = d.dismissed?.length ?? 0;
+    d.dismissed = (d.dismissed ?? []).filter((x) => x.fingerprint !== fingerprint);
+    if (d.dismissed.length === before) throw notFound(`Issue ${fingerprint} is not dismissed`);
+    this.persist();
+  }
+
+  setGuard(id: string, guard: GuardState) {
+    const d = this.diagrams.get(id);
+    if (!d) throw notFound(`Diagram ${id} not found`);
+    d.guard = guard;
+    this.persist();
+  }
+
+  markHumanAdded(id: string, elementIds: string[]) {
+    const d = this.diagrams.get(id);
+    if (!d || !elementIds.length) return;
+    d.humanAdded = [...new Set([...(d.humanAdded ?? []), ...elementIds])];
+    this.persist();
   }
 
   addComment(id: string, c: Omit<Comment, "id" | "createdAt" | "status" | "kind" | "resolvedBy" | "resolvedAt"> & { kind?: Comment["kind"] }) {

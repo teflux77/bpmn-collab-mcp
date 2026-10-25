@@ -10,7 +10,23 @@ description: Create, review and evolve BPMN 2.0 / DMN diagrams with a human thro
 2. If you know an older version, `get_changes_since` and acknowledge the human changes.
 3. Open comments come with `get_diagram` (or `list_comments` onlyOpen). Comments of kind `ai-request` come first: they are instructions from the human, apply each one on its element, reply with `add_comment` (parentId) saying what you did, then `resolve_comment`. Comments of kind `note` are remarks: answer them; resolve only if the human asked for a change you applied. Never leave an applied `ai-request` open, never resolve one you did not apply (reply with your question instead).
 4. Modify with `update_diagram` passing the `baseVersion` you read. On a conflict, re-read and merge.
-5. `update_diagram` returns the validation issues: errors reject the save; fix every layout warning in a follow-up `update_diagram` until none is left (see "Layout (DI)" below). Mention other warnings only if relevant.
+5. `update_diagram` returns the open issues (with fingerprints) and a loop guard: errors reject the save; triage the warnings as described in "Lint issues" below, never in an open-ended loop.
+
+## Lint issues: triage, never loop
+Issues carry a stable `fingerprint` and a `status` (open / dismissed); `list_issues` lists them, `get_diagram`, `validate_diagram` and `update_diagram` return them too. For each open warning or info:
+- **(a) Real problem, safe and unambiguous fix** (missing name, missing DI, obvious label of an XOR branch, label overlap): fix it.
+- **(b) False positive, or rule not relevant here**: `dismiss_issue` with a short reason. Dismissed issues are not reported again; the human sees them greyed and can restore them.
+- **(c) Depends on business information**: `add_comment` on the element with one precise question. Do not guess.
+
+Stop rules (all of them apply):
+- At most **3 fix-then-validate cycles per user request**, then stop and summarize.
+- After each save, compare the set of open fingerprints with the previous one: **stop** if it is identical, larger, or equal to a set already seen in this request.
+- If `update_diagram` returns **`loop_guard: true`**, stop immediately: do not save again for these issues; follow its `instruction`.
+- A fix must not recreate an issue of the same rule on the same element (`introduced` lists what your save added).
+- Do not touch elements a human added that have nothing to do with the issue; `humanElementsTouched` warns you if you did: restore them.
+- Warnings on elements where you asked a question (open comment) wait for the human: leave them.
+
+End with a summary: **X fixed, Y dismissed (with reasons), Z waiting for the human** (with the questions asked).
 
 ## Modeling rules
 - Valid BPMN 2.0 XML including DI (bpmndi shapes and edges with coordinates).

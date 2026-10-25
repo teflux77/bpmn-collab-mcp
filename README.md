@@ -49,7 +49,8 @@ npx @modelcontextprotocol/inspector
 | `create_diagram` / `list_diagrams` | Start or list diagrams |
 | `get_diagram` | Current XML (with human edits) + open comments |
 | `get_changes_since` | Semantic diff by element id between versions (bpmn-js-differ + `pm:` metadata): added, removed, modified fields, moved |
-| `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated; XML without DI is auto-laid out until a human edits) |
+| `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated; XML without DI is auto-laid out until a human edits). Returns open issues and a **loop guard** (`loop_guard: true` = stop and ask the human: same issues after two AI saves, oscillation, growing or newly introduced issues) |
+| `list_issues` / `dismiss_issue` / `restore_issue` | Lint issues with stable fingerprints; false positives set aside with a reason (AI or human), shown greyed in the canvas |
 | `validate_diagram` | Deterministic rules: bpmnlint `recommended`, layout rules from `@miragon/bpmnlint-plugin-rules`, project rules (`src/lint/`, `src/layout-check.ts`) |
 | `list_comments` / `add_comment` / `resolve_comment` | Element-anchored review threads; `ai-request` comments are human instructions the AI applies then resolves |
 | `export_diagram` | Latest revision as BPMN XML **and** a signed download link (`/dl/…`, about 10 min, one revision, read-only, works without the canvas login) |

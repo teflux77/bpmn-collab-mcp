@@ -9,6 +9,8 @@ import { diffXml } from "./diff.js";
 import { checkAnchor, commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { autoLayout, hasDi } from "./autolayout.js";
 import { exportFileName, type ExportSigner } from "./export.js";
+import { guardAiSave, openIssues, summarize, triage } from "./issues.js";
+import { currentIssues, dismissIssue, listIssues, restoreIssue } from "./triage.js";
 import { parse } from "./model.js";
 
 export interface McpOptions {
@@ -96,8 +98,9 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
     "get_diagram",
     {
       description:
-        "Get the CURRENT XML (including human edits) plus open comments. Always call this before modifying a diagram. " +
-        'Open comments of kind "ai-request" come first: they are instructions from the human; apply them, then resolve_comment.',
+        "Get the CURRENT XML (including human edits) plus open comments and open lint issues (with fingerprints). Always call " +
+        'this before modifying a diagram. Open comments of kind "ai-request" come first: they are instructions from the human; ' +
+        "apply them, then resolve_comment. Triage issues as described in list_issues.",
       inputSchema: z.object({ id: z.string() }),
       _meta: showCanvas,
     },
@@ -105,10 +108,13 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
       const d = store.get(id);
       if (!d) return fail({ error: "not found" });
       const rev = store.latest(d);
+      const issues = await currentIssues(store, d);
       return text({
         id, name: d.name, version: rev.version, lastAuthor: rev.author, xml: rev.xml,
         canvasUrl: `${publicUrl}/canvas?id=${d.id}`,
         openComments: openComments(d.comments),
+        issueSummary: summarize(issues),
+        openIssues: openIssues(issues),
       });
     },
   );
@@ -134,8 +140,9 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
     {
       description:
         "Save a new full XML revision. Must pass baseVersion (the version you read). Validation errors reject the save; " +
-        "warnings (including layout warnings) are returned and should be fixed. Keep the DI from get_diagram: XML without any DI " +
-        "is laid out automatically only while no human has edited the diagram, otherwise it is refused.",
+        "open warnings are returned with fingerprints. If loop_guard is true, STOP: do not save again for these issues, " +
+        "summarize and ask the human. Keep the DI from get_diagram (XML without any DI is laid out automatically only while " +
+        "no human has edited the diagram, otherwise it is refused) and do not touch elements a human added (humanElementsTouched).",
       inputSchema: z.object({ id: z.string(), xml: z.string(), baseVersion: z.number().int(), note: z.string().optional() }),
     },
     async ({ id, xml: submitted, baseVersion, note }) => {
@@ -144,11 +151,27 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
       const prepared = await withLayout(submitted, d.revisions.some((r) => r.author.startsWith("human:")));
       if (prepared.refused) return fail({ error: prepared.refused });
       const { xml, layout } = prepared;
-      const issues = await validateXml(xml);
-      if (issues.some((i) => i.severity === "error")) return fail({ error: "validation failed", layout, issues });
+      const issues = triage(await validateXml(xml), d.dismissed);
+      if (issues.some((i) => i.severity === "error")) return fail({ error: "validation failed", layout, issues: openIssues(issues) });
+      const before = store.latest(d).xml;
       try {
         const rev = store.update(id, xml, baseVersion, "ai", note);
-        return text({ ok: true, version: rev.version, layout, issues });
+        // Elements a human added that this save modified, moved or removed.
+        const changes = await diffXml(before, xml);
+        const touched = [...changes.modified, ...changes.moved, ...changes.removed].map((e) => e.id).filter((x) => d.humanAdded?.includes(x));
+        // Loop guard: warnings waiting for a human answer (open AI comment on the element) do not count.
+        const waiting = new Set(d.comments.filter((c) => c.status === "open" && c.author === "ai").map((c) => c.elementId));
+        const relevant = openIssues(issues).filter((i) => i.severity === "warning" && !(i.elementId && waiting.has(i.elementId)));
+        const { verdict, state } = guardAiSave(d.guard, relevant);
+        store.setGuard(id, state);
+        return text({
+          ok: true, version: rev.version, layout,
+          issueSummary: summarize(issues), openIssues: openIssues(issues),
+          ...verdict,
+          ...(touched.length
+            ? { humanElementsTouched: [...new Set(touched)], humanElementsWarning: "These elements were added by a human: leave them unchanged unless an issue or comment is about them." }
+            : {}),
+        });
       } catch (e) {
         if (e instanceof StoreError && e.code === 409)
           return fail({ error: e.message, conflict: true, hint: "Re-read with get_diagram, check get_changes_since, merge, retry." });
@@ -160,12 +183,41 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
 
   s.registerTool(
     "validate_diagram",
-    { description: "Run deterministic validation on the current revision.", inputSchema: z.object({ id: z.string() }) },
-    async ({ id }) => {
-      const d = store.get(id);
-      if (!d) return fail({ error: "not found" });
-      return text(await validateXml(store.latest(d).xml));
+    {
+      description: "Run deterministic validation on the current revision. Issues carry a fingerprint and a status (open / dismissed).",
+      inputSchema: z.object({ id: z.string() }),
     },
+    async ({ id }) => outcome(await listIssues(store, id)),
+  );
+
+  s.registerTool(
+    "list_issues",
+    {
+      description:
+        "List the lint issues of the latest revision: fingerprint, rule, severity, elementId, message, status (open / dismissed). " +
+        "Triage each open issue: (a) real problem with a safe, unambiguous fix -> fix it; (b) false positive or rule not relevant " +
+        "here -> dismiss_issue with a short reason; (c) depends on business information -> add_comment on the element with a " +
+        "precise question, do not guess.",
+      inputSchema: z.object({ id: z.string(), includeDismissed: z.boolean().optional() }),
+    },
+    async ({ id, includeDismissed }) => outcome(await listIssues(store, id, includeDismissed ?? true)),
+  );
+
+  s.registerTool(
+    "dismiss_issue",
+    {
+      description:
+        "Set aside a warning or info issue (false positive, rule not relevant here) with a short reason: it is no longer reported " +
+        "as active, and stays visible (greyed) to the human, who can restore it. Errors cannot be dismissed.",
+      inputSchema: z.object({ id: z.string(), fingerprint: z.string(), reason: z.string() }),
+    },
+    async ({ id, fingerprint, reason }) => outcome(await dismissIssue(store, id, fingerprint, reason, "ai")),
+  );
+
+  s.registerTool(
+    "restore_issue",
+    { description: "Make a dismissed issue active again.", inputSchema: z.object({ id: z.string(), fingerprint: z.string() }) },
+    async ({ id, fingerprint }) => outcome(await restoreIssue(store, id, fingerprint)),
   );
 
   s.registerTool(
@@ -276,6 +328,24 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
       _meta: appOnly,
     },
     async ({ id, commentId, status, author }) => outcome(setStatusFromHuman(store, id, commentId, status, author)),
+  );
+
+  registerAppTool(
+    s,
+    "canvas_dismiss_issue",
+    {
+      description: "Canvas: the human sets an issue aside.",
+      inputSchema: z.object({ id: z.string(), fingerprint: z.string(), reason: z.string(), author: z.string().optional() }),
+      _meta: appOnly,
+    },
+    async ({ id, fingerprint, reason, author }) => outcome(await dismissIssue(store, id, fingerprint, reason, `human:${author ?? "anonymous"}`)),
+  );
+
+  registerAppTool(
+    s,
+    "canvas_restore_issue",
+    { description: "Canvas: the human restores a dismissed issue.", inputSchema: z.object({ id: z.string(), fingerprint: z.string() }), _meta: appOnly },
+    async ({ id, fingerprint }) => outcome(await restoreIssue(store, id, fingerprint)),
   );
 
   registerAppTool(
