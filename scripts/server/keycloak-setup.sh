@@ -29,7 +29,12 @@ kc update "realms/${R}" \
 echo "realm ${R}: settings applied"
 
 # client scope "mcp" with the audience mapper
-id_of() { awk -F, -v n="$2" '$2==n {print $1}' <<<"$1"; }
+# "id,name" CSV lines -> id of the given name (pure bash: the Keycloak image has no awk)
+id_of() {
+  local id name
+  while IFS=, read -r id name; do [[ "${name}" == "$2" ]] && { echo "${id}"; return; }; done <<<"$1"
+  return 0
+}
 SID=$(id_of "$(kc get client-scopes -r "$R" --fields id,name --format csv --noquotes)" mcp)
 if [[ -z "${SID}" ]]; then
   SID=$(kc create client-scopes -r "$R" -i -s name=mcp -s protocol=openid-connect \
