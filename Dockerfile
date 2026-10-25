@@ -1,5 +1,5 @@
 # Works on Hugging Face Spaces (Docker SDK) and on any container host.
-FROM node:22.23.4-slim
+FROM node:24.22.1-slim
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci

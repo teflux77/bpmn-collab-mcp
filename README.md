@@ -26,7 +26,8 @@ Human + AI collaborative BPMN 2.0 modeling, over MCP.
 ```bash
 npm install
 npm run build
-npm start            # http://localhost:7860
+npm test
+npm start            # http://localhost:7860 (listens on 127.0.0.1; set HOST=0.0.0.0 in containers)
 ```
 
 - MCP endpoint (streamable HTTP, stateless): `http://localhost:7860/mcp`
@@ -44,9 +45,9 @@ npx @modelcontextprotocol/inspector
 |---|---|
 | `create_diagram` / `list_diagrams` | Start or list diagrams |
 | `get_diagram` | Current XML (with human edits) + open comments |
-| `get_changes_since` | Semantic diff by element id between versions |
+| `get_changes_since` | Semantic diff by element id between versions (bpmn-js-differ + `pm:` metadata): added, removed, modified fields, moved |
 | `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated) |
-| `validate_diagram` | Deterministic rules (start/end, labels, call activity refs, abstraction level…) |
+| `validate_diagram` | Deterministic rules: bpmnlint `recommended` + project rules (`src/lint/`) |
 | `list_comments` / `add_comment` / `resolve_comment` | Element-anchored review threads |
 | `export_diagram` | Plain BPMN XML |
 
@@ -60,7 +61,7 @@ There is no authentication yet. Do not expose it publicly with real data.
 ## Roadmap
 
 1. MCP Apps: render the canvas inline in Claude (`ui://` resource), replacing the external canvas URL.
-2. Replace ad-hoc rules with `bpmnlint` + custom rule package (your best practices).
+2. Publish the project rules (`src/lint/rules.ts`, already in bpmnlint format) as a `bpmnlint-plugin-*` package.
 3. DMN (dmn-js) and forms (form-js) linked from `pm:decisionRef` / `pm:formRef`.
 4. Process architecture graph (levels, parent/child, `calledElement` links) kept next to the BPMN files.
 5. Review pass: LLM critique emitted as comments with category and severity.

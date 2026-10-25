@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Parses, but breaks rules on purpose:
+     no start event, call activity without calledElement, flow to a missing element,
+     task without DI, unnamed task, unlabeled gateway branches. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="Definitions_Bad" targetNamespace="https://github.com/teflux77/bpmn-collab-mcp/bpmn">
+  <bpmn:process id="Process_Bad" isExecutable="false">
+    <bpmn:task id="Task_Unnamed">
+      <bpmn:outgoing>Flow_A</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_Q" name="Ok?">
+      <bpmn:incoming>Flow_A</bpmn:incoming>
+      <bpmn:outgoing>Flow_B</bpmn:outgoing>
+      <bpmn:outgoing>Flow_C</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:callActivity id="Call_NoRef" name="Run sub-process">
+      <bpmn:incoming>Flow_B</bpmn:incoming>
+    </bpmn:callActivity>
+    <bpmn:task id="Task_NoDI" name="Hidden task">
+      <bpmn:incoming>Flow_C</bpmn:incoming>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_A" sourceRef="Task_Unnamed" targetRef="Gateway_Q" />
+    <bpmn:sequenceFlow id="Flow_B" sourceRef="Gateway_Q" targetRef="Call_NoRef" />
+    <bpmn:sequenceFlow id="Flow_C" sourceRef="Gateway_Q" targetRef="Task_NoDI" />
+    <bpmn:sequenceFlow id="Flow_Dangling" sourceRef="Task_Unnamed" targetRef="Task_Missing" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Bad">
+    <bpmndi:BPMNPlane id="BPMNPlane_Bad" bpmnElement="Process_Bad">
+      <bpmndi:BPMNShape id="Task_Unnamed_di" bpmnElement="Task_Unnamed">
+        <dc:Bounds x="100" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Q_di" bpmnElement="Gateway_Q">
+        <dc:Bounds x="250" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_NoRef_di" bpmnElement="Call_NoRef">
+        <dc:Bounds x="350" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_A_di" bpmnElement="Flow_A">
+        <di:waypoint x="200" y="140" />
+        <di:waypoint x="250" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B_di" bpmnElement="Flow_B">
+        <di:waypoint x="300" y="140" />
+        <di:waypoint x="350" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

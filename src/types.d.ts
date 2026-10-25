@@ -7,3 +7,20 @@ declare module "bpmn-moddle" {
     create(type: string, attrs?: Record<string, unknown>): any;
   }
 }
+declare module "bpmn-js-differ" {
+  export function diff(a: any, b: any): any;
+}
+declare module "bpmnlint/lib/resolver/node-resolver" {
+  const NodeResolver: new (options?: Record<string, unknown>) => {
+    resolveRule(pkg: string, ruleName: string): any;
+    resolveConfig(pkg: string, configName: string): any;
+  };
+  export default NodeResolver;
+}
+declare module "bpmnlint" {
+  export class Linter {
+    constructor(options: { config?: unknown; resolver: unknown });
+    /** Reports keyed by rule name; category is "error" | "warn" | "info" | "rule-error". */
+    lint(definitions: unknown): Promise<Record<string, { id?: string; message: string; category: string }[]>>;
+  }
+}

@@ -3,7 +3,7 @@
 ## Principle: LLM proposes, deterministic rules dispose
 
 1. LLM generates/modifies BPMN.
-2. `validateXml` checks it (parse, references, structure). Errors reject the save.
+2. `validateXml` checks it: bpmn-moddle parse + reference resolution, then bpmnlint (`recommended` + project rules in `src/lint/`, severities in `src/lint/config.ts`). Errors reject AI saves; human saves are kept unless the XML does not parse, and issues are shown in the canvas.
 3. LLM fixes (short loop).
 4. A separate critique pass writes observations as comments (never silently into the diagram).
 
@@ -40,5 +40,5 @@ References worth reading: APQC PCF, ArchiMate (Value Stream / Business Process),
 
 - MCP Apps (`ui://`) inline rendering is not wired yet; the canvas is a separate page.
 - No authentication, in-memory + JSON file persistence.
-- Validation rules are a minimal starter set.
+- bpmn-js-differ 3.2.0 does not track artifacts outside collaborations, ignores `extensionElements`, passes oldValue/newValue swapped, and throws when DI references a deleted element: `src/diff.ts` compensates (ids, artifacts, `pm:`, values read from both models, `partial` fallback).
 - Layout: the AI must produce BPMN DI (diagram interchange) coordinates, or an auto-layout step must be added (for example bpmn-auto-layout) before humans open the diagram.
