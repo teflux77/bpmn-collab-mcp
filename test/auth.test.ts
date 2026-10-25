@@ -111,6 +111,24 @@ describe("OAuth on /mcp (resource server)", () => {
     await client.close();
   });
 
+  it("export_diagram links never carry the MCP access token", async () => {
+    const token = await sign({ email: ALLOWED });
+    const client = new Client({ name: "auth-test", version: "0.0.0" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
+    const created: any = await client.callTool({ name: "create_diagram", arguments: { name: "Leak check" } });
+    const { id } = JSON.parse(created.content[0].text);
+    const r: any = await client.callTool({ name: "export_diagram", arguments: { id } });
+    const out = JSON.parse(r.content[0].text);
+    await client.close();
+    const [, sig] = token.split(".");
+    expect(out.downloadUrl).not.toContain(token);
+    expect(out.downloadUrl).not.toContain(sig);
+    // the link works without any credential (no basic auth, no bearer)
+    const dl = await fetch(`${base}${new URL(out.downloadUrl).pathname}`);
+    expect(dl.status).toBe(200);
+    expect([...dl.headers.values()].join(" ")).not.toContain(sig);
+  });
+
   it("refuses to start with OAuth but no allowed users (fail closed)", () => {
     expect(() =>
       createApp({ store: new Store(), publicUrl: "http://mcp.test", oauth: { issuer: ISSUER, resource: RESOURCE, allowedUsers: [], scope: "mcp", allowInsecureIssuer: true } }),

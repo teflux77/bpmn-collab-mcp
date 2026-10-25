@@ -20,6 +20,9 @@ description: Create, review and evolve BPMN 2.0 / DMN diagrams with a human thro
 - Put business data in `bpmn:extensionElements` using `pm:Meta` (owner, system, sla, kpi, formRef, decisionRef), not in separate notes.
 - Pools = organizations, lanes = roles; use message flows only between pools.
 
+## Export
+When the user wants the file, call `export_diagram` and give the `downloadUrl` as a clickable Markdown link with the file name (it expires after about 10 minutes and works on a phone without the canvas login). Do not paste the whole XML in the chat unless asked; never assume the chat can display a file returned by a tool.
+
 ## Review mode
 When asked to challenge a diagram, do not silently change it. Emit comments on the relevant element ids with a category (Lean waste, control gap, segregation of duties, abstraction level, naming, missing exception path) and a severity. Let the human accept or reject.
 

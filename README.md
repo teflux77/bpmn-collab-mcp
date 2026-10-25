@@ -33,7 +33,8 @@ npm start            # http://localhost:7860 (listens on 127.0.0.1; set HOST=0.0
 - MCP endpoint (streamable HTTP, stateless): `http://localhost:7860/mcp`
 - Human canvas: `http://localhost:7860/canvas?id=<diagramId>` (the id and URL are returned by `create_diagram`)
 - Inline canvas: in hosts that support MCP Apps (Claude web/Desktop), `create_diagram` and `get_diagram` render the same canvas in the conversation (`ui://bpmn-collab/canvas.html`); it talks to the server through app-only `canvas_*` tools and can post "apply the open AI requests" into the chat.
-- Environment: `PORT` (7860), `HOST` (127.0.0.1), `PUBLIC_URL`, `DATA_DIR`, `ALLOWED_HOSTS` (extra Host names accepted, comma-separated; localhost and the `PUBLIC_URL` host are always accepted).
+- Export: canvas buttons *Télécharger .bpmn* / *Télécharger SVG* (inline in Claude the host performs the download, with a signed link and a copy/paste panel as fallbacks), `GET /api/diagrams/:id/export.bpmn`, and signed links from `export_diagram`.
+- Environment: `PORT` (7860), `HOST` (127.0.0.1), `PUBLIC_URL`, `DATA_DIR`, `EXPORT_SIGNING_SECRET` (>= 32 chars, signs download links), `OAUTH_ISSUER` / `OAUTH_ALLOWED_USERS` (OAuth on /mcp), `ALLOWED_HOSTS` (extra Host names accepted, comma-separated; localhost and the `PUBLIC_URL` host are always accepted).
 
 Add it to Claude as a custom connector (remote MCP URL, must be public HTTPS), or test locally with the MCP Inspector:
 
@@ -51,7 +52,7 @@ npx @modelcontextprotocol/inspector
 | `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated; XML without DI is auto-laid out until a human edits) |
 | `validate_diagram` | Deterministic rules: bpmnlint `recommended`, layout rules from `@miragon/bpmnlint-plugin-rules`, project rules (`src/lint/`, `src/layout-check.ts`) |
 | `list_comments` / `add_comment` / `resolve_comment` | Element-anchored review threads; `ai-request` comments are human instructions the AI applies then resolves |
-| `export_diagram` | Plain BPMN XML |
+| `export_diagram` | Latest revision as BPMN XML **and** a signed download link (`/dl/…`, about 10 min, one revision, read-only, works without the canvas login) |
 
 ## Deploying
 

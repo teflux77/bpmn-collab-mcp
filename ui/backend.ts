@@ -20,6 +20,21 @@ export interface Backend {
   addComment(id: string, c: { elementId: string; text: string; kind: string; author: string }): Promise<Result>;
   setCommentStatus(id: string, commentId: string, status: "open" | "resolved", author: string): Promise<Result>;
   askHost?(text: string): Promise<void>;
+  /** Saves a file on the user's device; false when the environment refused it. */
+  download(fileName: string, mimeType: string, content: string): Promise<boolean>;
+  /** Inline only: asks the host to open a signed download link for the latest revision. */
+  openExportLink?(id: string): Promise<boolean>;
+}
+
+/** Standalone page: a regular browser download (works on desktop and mobile browsers). */
+function browserDownload(fileName: string, mimeType: string, content: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: fileName });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return true;
 }
 
 const json = { "content-type": "application/json" };
@@ -27,6 +42,7 @@ const rest = async (r: Response): Promise<Result> => ({ status: r.status, body: 
 
 export const restBackend: Backend = {
   canMessageHost: false,
+  download: async (fileName, mimeType, content) => browserDownload(fileName, mimeType, content),
   load: async (id) => rest(await fetch(`/api/diagrams/${id}`)),
   save: async (id, xml, baseVersion, author) =>
     rest(await fetch(`/api/diagrams/${id}`, { method: "PUT", headers: json, body: JSON.stringify({ xml, baseVersion, author }) })),
@@ -65,6 +81,24 @@ export async function appBackend(): Promise<{ backend: Backend; diagramId: Promi
     setCommentStatus: (id, commentId, status, author) => call("canvas_set_comment_status", { id, commentId, status, author }),
     askHost: async (text) => {
       await app.sendMessage({ role: "user", content: [{ type: "text", text }] });
+    },
+    // The sandboxed iframe cannot download by itself: the host does it (with its own confirmation).
+    download: async (fileName, mimeType, content) => {
+      try {
+        const r = await app.downloadFile({ contents: [{ type: "resource", resource: { uri: `file:///${fileName}`, mimeType, text: content } }] });
+        return !r.isError;
+      } catch {
+        return false;
+      }
+    },
+    openExportLink: async (id) => {
+      try {
+        const link = await call("canvas_export_link", { id });
+        if (link.status !== 200) return false;
+        return !(await app.openLink({ url: link.body.downloadUrl })).isError;
+      } catch {
+        return false;
+      }
     },
   };
   return { backend, diagramId };

@@ -56,7 +56,7 @@ describe("MCP over streamable HTTP", () => {
   it("lists the tools; canvas tools are app-only, create/get show the inline canvas", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      "add_comment", "canvas_add_comment", "canvas_load", "canvas_save", "canvas_set_comment_status",
+      "add_comment", "canvas_add_comment", "canvas_export_link", "canvas_load", "canvas_save", "canvas_set_comment_status",
       "create_diagram", "export_diagram", "get_changes_since", "get_diagram",
       "list_comments", "list_diagrams", "resolve_comment", "update_diagram", "validate_diagram",
     ]);

@@ -8,12 +8,14 @@ import { validateXml } from "./validate.js";
 import { diffXml } from "./diff.js";
 import { checkAnchor, commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { autoLayout, hasDi } from "./autolayout.js";
+import { exportFileName, type ExportSigner } from "./export.js";
 import { parse } from "./model.js";
 
 export interface McpOptions {
   store: Store;
   publicUrl: string;
   uiDir: string;
+  signer: ExportSigner;
 }
 
 /** The bpmn-js canvas, rendered inline by hosts that support MCP Apps. */
@@ -52,7 +54,13 @@ async function withLayout(xml: string, humanEdited: boolean) {
   return { xml: r.xml, layout: { mode: "auto" as const, notes: r.notes } };
 }
 
-export function buildMcp({ store, publicUrl, uiDir }: McpOptions) {
+/** Signed, read-only download link for one revision (no basic auth needed, expires in minutes). */
+export function downloadLink(signer: ExportSigner, publicUrl: string, id: string, version: number) {
+  const { token, expiresAt } = signer.sign(id, version);
+  return { downloadUrl: `${publicUrl}/dl/${token}`, expiresAt };
+}
+
+export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
   const s = new McpServer({ name: "bpmn-collab-mcp", version: "0.1.0" });
 
   s.registerTool(
@@ -206,10 +214,19 @@ export function buildMcp({ store, publicUrl, uiDir }: McpOptions) {
 
   s.registerTool(
     "export_diagram",
-    { description: "Return the current XML for download or import into Signavio/ARIS.", inputSchema: z.object({ id: z.string() }) },
+    {
+      description:
+        "Export the latest revision as a .bpmn file (standard BPMN 2.0, importable in Signavio, ARIS, Camunda). Returns the XML " +
+        "and a signed downloadUrl valid about 10 minutes for this revision only: give the user that link as a clickable " +
+        "Markdown link (it works on a phone without the canvas login). Do not assume the chat can display a file.",
+      inputSchema: z.object({ id: z.string() }),
+    },
     async ({ id }) => {
       const d = store.get(id);
-      return d ? text(store.latest(d).xml) : fail({ error: "not found" });
+      if (!d) return fail({ error: "not found" });
+      const rev = store.latest(d);
+      const fileName = exportFileName(d.name, rev.version);
+      return text({ ok: true, id, name: d.name, version: rev.version, fileName, ...downloadLink(signer, publicUrl, id, rev.version), xml: rev.xml });
     },
   );
 
@@ -259,6 +276,18 @@ export function buildMcp({ store, publicUrl, uiDir }: McpOptions) {
       _meta: appOnly,
     },
     async ({ id, commentId, status, author }) => outcome(setStatusFromHuman(store, id, commentId, status, author)),
+  );
+
+  registerAppTool(
+    s,
+    "canvas_export_link",
+    { description: "Canvas: signed download link for the latest revision.", inputSchema: z.object({ id: z.string() }), _meta: appOnly },
+    async ({ id }) => {
+      const d = store.get(id);
+      if (!d) return fail({ status: 404, error: "not found" });
+      const rev = store.latest(d);
+      return text({ fileName: exportFileName(d.name, rev.version), version: rev.version, ...downloadLink(signer, publicUrl, id, rev.version) });
+    },
   );
 
   return s;

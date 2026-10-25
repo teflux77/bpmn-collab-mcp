@@ -1,6 +1,7 @@
 # bpmn-collab-mcp
 # - /mcp: only Anthropic's outbound range (ANTHROPIC_EGRESS) and the admin IP; others get 403.
 #   Provisional until OAuth (docs/oauth-plan.md).
+# - /dl/<signed token>: public, the token is the credential (see src/export.ts).
 # - everything else (canvas, REST API, assets): HTTP basic auth.
 {$BPMN_HOST} {
 	encode zstd gzip
@@ -23,6 +24,13 @@
 		respond "Forbidden" 403
 	}
 
+	# Signed download links (export_diagram): the HMAC signature in the URL is the credential,
+	# no basic auth so they open on a phone. Read-only, one revision, ~10 minutes.
+	@download path /dl/*
+	handle @download {
+		reverse_proxy app:7860
+	}
+
 	handle {
 		basic_auth {
 			{$CANVAS_USER} {$CANVAS_HASH}
@@ -32,6 +40,12 @@
 
 	log {
 		output stdout
-		format console
+		# download tokens are credentials: never written to the logs
+		format filter {
+			wrap console
+			fields {
+				request>uri regexp ^/dl/.* /dl/REDACTED
+			}
+		}
 	}
 }

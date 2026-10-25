@@ -14,6 +14,8 @@ services:
       # OAuth on /mcp: empty OAUTH_ISSUER = disabled (docs/deploy.md, "OAuth")
       OAUTH_ISSUER: ${OAUTH_ISSUER:-}
       OAUTH_ALLOWED_USERS: ${OAUTH_ALLOWED_USERS:-}
+      # HMAC key of the signed download links (scripts/server/gen-secrets.sh)
+      EXPORT_SIGNING_SECRET: ${EXPORT_SIGNING_SECRET:-}
     volumes:
       - bpmn-data:/data
     networks: [web]
@@ -60,14 +62,14 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${KC_DB_PASSWORD:?run scripts/server/keycloak-secrets.sh}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:?run scripts/server/gen-secrets.sh}
       KC_HOSTNAME: https://${AUTH_HOST}
       KC_HTTP_ENABLED: "true" # TLS ends at Caddy
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: "true"
       # Temporary admin, used only on the very first start (create your own admin, then delete it)
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-bootstrap-admin}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?run scripts/server/keycloak-secrets.sh}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?run scripts/server/gen-secrets.sh}
     networks: [web, keycloak]
     mem_limit: 1g
     security_opt: ["no-new-privileges:true"]

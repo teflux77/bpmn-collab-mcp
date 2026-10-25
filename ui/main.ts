@@ -4,6 +4,7 @@ import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
+import { exportFileName } from "../src/filename";
 
 const params = new URLSearchParams(location.search);
 // Inline in an MCP Apps host: framed and opened without ?id= (the id comes from the tool call).
@@ -35,11 +36,13 @@ let issues: any[] = [];
 let selected: string | null = null;
 let saving: number | undefined;
 let dirty = false; // local edits not saved yet
+let diagramName = "diagram";
 
 async function load() {
   const { status: code, body: d } = await backend.load(id!);
   if (code !== 200) return status(`Cannot load diagram: ${d.error}`);
   version = d.version;
+  diagramName = d.name ?? diagramName;
   comments = d.comments;
   issues = d.issues ?? [];
   const { warnings } = await modeler.importXML(d.xml);
@@ -195,6 +198,53 @@ async function poll() {
   if (!dirty) await load();
   else status(`v${r.body.version} saved by ${r.body.lastAuthor ?? "someone else"}: reload to see it`);
 }
+
+// ---- Export: .bpmn (latest revision) and SVG ----
+/** Saves pending edits first, so the file is the latest revision. */
+async function flushSave() {
+  if (saving !== undefined) {
+    clearTimeout(saving);
+    await save();
+  }
+}
+
+function showExportPanel(content: string, message: string) {
+  ($("#export-msg") as HTMLElement).textContent = message;
+  const area = $("#export-text") as HTMLTextAreaElement;
+  area.value = content;
+  $("#export-panel").hidden = false;
+  area.focus();
+  area.select();
+}
+
+async function copyExportText() {
+  const area = $("#export-text") as HTMLTextAreaElement;
+  area.select();
+  try {
+    await navigator.clipboard.writeText(area.value);
+  } catch {
+    document.execCommand("copy"); // older or sandboxed contexts
+  }
+  status("XML copied");
+}
+
+async function exportFile(kind: "bpmn" | "svg") {
+  await flushSave();
+  const { content, mime } =
+    kind === "bpmn"
+      ? { content: (await modeler.saveXML({ format: true })).xml as string, mime: "application/xml" }
+      : { content: (await modeler.saveSVG()).svg as string, mime: "image/svg+xml" };
+  const fileName = exportFileName(diagramName, version, kind);
+  if (await backend.download(fileName, mime, content)) return status(`${fileName} downloaded`);
+  // Inline in a chat: the host refused or cannot download; try a signed link, then copy/paste.
+  if (kind === "bpmn" && (await backend.openExportLink?.(id!))) return status("Download link opened");
+  showExportPanel(content, `Download blocked here: copy the ${kind === "bpmn" ? "XML" : "SVG"} and save it as ${fileName}.`);
+}
+
+$("#dl-bpmn").onclick = () => void exportFile("bpmn").catch((e) => status(`Export failed: ${e.message ?? e}`));
+$("#dl-svg").onclick = () => void exportFile("svg").catch((e) => status(`Export failed: ${e.message ?? e}`));
+$("#export-copy").onclick = () => void copyExportText();
+$("#export-close").onclick = () => ($("#export-panel").hidden = true);
 
 async function start() {
   if (inline) {

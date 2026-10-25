@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Adds the Keycloak settings and generated secrets to /opt/bpmn-collab/.env (mode 600). Run on the VPS
-# as deploy, before deploying the Keycloak services. Idempotent: existing values are kept.
+# Adds generated secrets and defaults to /opt/bpmn-collab/.env (mode 600): Keycloak (database, bootstrap
+# admin) and the signing key of the download links. Run on the VPS as deploy before deploying a version
+# that needs them. Idempotent: existing values are kept.
 # Secrets are generated on the server and never printed. To read the admin password yourself:
 #   grep KC_BOOTSTRAP_ADMIN_PASSWORD /opt/bpmn-collab/.env
 set -euo pipefail
@@ -19,6 +20,7 @@ has AUTH_HOST || add AUTH_HOST "${AUTH_HOST_DEFAULT}"
 has KC_DB_PASSWORD || add KC_DB_PASSWORD "$(gen)"
 has KC_BOOTSTRAP_ADMIN_USERNAME || add KC_BOOTSTRAP_ADMIN_USERNAME bootstrap-admin
 has KC_BOOTSTRAP_ADMIN_PASSWORD || add KC_BOOTSTRAP_ADMIN_PASSWORD "$(gen)"
+has EXPORT_SIGNING_SECRET || add EXPORT_SIGNING_SECRET "$(gen)$(gen)"
 # OAuth stays off for the app until the realm and your user exist (docs/deploy.md, "OAuth")
 grep -qE '^OAUTH_ISSUER=' "${ENV_FILE}" || add OAUTH_ISSUER ""
 grep -qE '^OAUTH_ALLOWED_USERS=' "${ENV_FILE}" || add OAUTH_ALLOWED_USERS ""

@@ -7,6 +7,7 @@ import { Store } from "./store.js";
 import { buildMcp } from "./mcp.js";
 import { commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { mountOAuth, type OAuthConfig } from "./auth.js";
+import { ExportSigner, exportFileName } from "./export.js";
 
 export interface AppOptions {
   store: Store;
@@ -16,6 +17,8 @@ export interface AppOptions {
   allowedHosts?: string[];
   /** When set, /mcp requires an OAuth access token from this issuer for an allowlisted user. */
   oauth?: OAuthConfig;
+  /** HMAC secret for signed download URLs (>= 32 chars); without it a random per-process key is used. */
+  exportSecret?: string;
 }
 
 export function createApp(opts: AppOptions) {
@@ -28,9 +31,38 @@ export function createApp(opts: AppOptions) {
   app.use(express.json({ limit: "16mb" }));
 
   // ---- MCP endpoint: one server per request (stateless), 2026 protocol + legacy fallback ----
-  const mcp = toNodeHandler(createMcpHandler(() => buildMcp({ store, publicUrl: opts.publicUrl, uiDir })));
+  const signer = new ExportSigner(opts.exportSecret);
+  const mcp = toNodeHandler(createMcpHandler(() => buildMcp({ store, publicUrl: opts.publicUrl, uiDir, signer })));
   const guard = opts.oauth ? mountOAuth(app, opts.oauth) : [];
   app.all("/mcp", ...guard, (req, res) => mcp(req, res, req.body));
+
+  // ---- .bpmn export: the XML of a stored revision, as a file ----
+  const sendBpmn = (res: express.Response, name: string, version: number, xml: string) => {
+    const file = exportFileName(name, version);
+    res.set({
+      "Content-Type": "application/xml; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${file}"; filename*=UTF-8''${encodeURIComponent(file)}`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.send(xml);
+  };
+  // Latest revision, behind the same protection as the rest of /api (basic auth in Caddy).
+  app.get("/api/diagrams/:id/export.bpmn", (req, res) => {
+    const d = store.get(req.params.id);
+    if (!d) return void res.status(404).json({ error: "not found" });
+    const rev = store.latest(d);
+    sendBpmn(res, d.name, rev.version, rev.xml);
+  });
+  // Signed link (export_diagram, canvas fallback): no basic auth, one revision, expires in minutes.
+  app.get("/dl/:token", (req, res) => {
+    const grant = signer.verify(req.params.token);
+    if ("error" in grant) return void res.status(grant.error === "expired" ? 410 : 403).json({ error: grant.error === "expired" ? "link expired" : "invalid link" });
+    const d = store.get(grant.id);
+    const rev = d?.revisions.find((r) => r.version === grant.version);
+    if (!d || !rev) return void res.status(404).json({ error: "not found" });
+    sendBpmn(res, d.name, rev.version, rev.xml);
+  });
 
   // ---- REST used by the standalone canvas ----
   const send = (res: express.Response, o: Outcome) => void res.status(o.status).json(o.body);

@@ -15,6 +15,7 @@ You (browser, basic auth) ──HTTPS /canvas, /api──▶ Caddy ──▶ app
 |---|---|---|
 | `/mcp` | Anthropic outbound range + your IP | Caddy `remote_ip` (`ANTHROPIC_EGRESS`, `ADMIN_IP`), others get 403. Provisional until OAuth (`docs/oauth-plan.md`). |
 | `/canvas`, `/api`, assets | you | HTTP basic auth (bcrypt hash in the server env file) |
+| `/dl/<token>` | anyone holding a link from `export_diagram` | HMAC-signed, one revision, ~10 min, read-only; tokens are redacted from Caddy logs |
 | SSH 22 | your IP only | Hetzner Cloud firewall; key-only, user `deploy` |
 | 80 / 443 | everyone | 80 for the ACME challenge and the redirect to HTTPS |
 
@@ -71,7 +72,7 @@ Keycloak 26 + Postgres run in the same compose stack. The app verifies Keycloak'
 
 Setup, in order (the app keeps working without OAuth until the last step):
 
-1. On the VPS: `/opt/bpmn-collab/repo/scripts/server/keycloak-secrets.sh` (adds `AUTH_HOST`, generated `KC_DB_PASSWORD` and `KC_BOOTSTRAP_ADMIN_PASSWORD`, empty `OAUTH_*`).
+1. On the VPS: `/opt/bpmn-collab/repo/scripts/server/gen-secrets.sh` (adds `AUTH_HOST`, generated `KC_DB_PASSWORD`, `KC_BOOTSTRAP_ADMIN_PASSWORD` and `EXPORT_SIGNING_SECRET`, empty `OAUTH_*`). Run it again after pulling a version that needs a new secret: it only adds what is missing.
 2. DNS: `SUBDOMAIN=auth npm run dns` then `-- --apply`.
 3. Push: the timer starts Keycloak and Postgres; Caddy gets the certificate for auth.teflux.dev.
 4. On the VPS: `/opt/bpmn-collab/repo/scripts/server/keycloak-setup.sh` creates the `teflux` realm (no self-registration, brute-force protection, refresh token rotation), the `mcp` scope (audience mapper) and two public PKCE clients: `claude-web` (`https://claude.ai/api/mcp/auth_callback`) and `claude-code` (loopback port 33418).

@@ -19,7 +19,7 @@ npm run teardown      # remove DNS records + firewall (dry-run; -- --apply)
 
 Deployment: `docs/deploy.md` (VPS + Caddy + GHCR, pull-based updates by a timer on the VPS). Deployment scripts read secrets from `.env.local` (ignored, unreadable by Claude Code via `.claude/settings.json`) and never print them; any `--apply`, SSH or push needs explicit approval.
 
-Environment: `PORT` (7860), `HOST` (127.0.0.1; containers use 0.0.0.0), `PUBLIC_URL`, `DATA_DIR` (./data), `ALLOWED_HOSTS` (extra Host names, comma-separated).
+Environment: `PORT` (7860), `HOST` (127.0.0.1; containers use 0.0.0.0), `PUBLIC_URL`, `DATA_DIR` (./data), `ALLOWED_HOSTS` (extra Host names, comma-separated), `EXPORT_SIGNING_SECRET` (HMAC key of `/dl/` download links; random per process if unset), `OAUTH_ISSUER` + `OAUTH_ALLOWED_USERS` (OAuth on `/mcp`, off when empty).
 Register locally in Claude Code: `claude mcp add --transport http bpmn http://localhost:7860/mcp`.
 
 ## Architecture
@@ -27,6 +27,7 @@ Register locally in Claude Code: `claude mcp add --transport http bpmn http://lo
 - `src/main.ts` reads env and listens; `src/app.ts` builds the Express app: Host header validation, `/mcp` (MCP SDK v2 `createMcpHandler`, one server per request), REST `/api/diagrams/*` for the standalone canvas, `/canvas`.
 - `src/mcp.ts`: model tools (create/get/update/validate/diff/comments/export) and app-only `canvas_*` tools + `ui://bpmn-collab/canvas.html` resource (MCP Apps, `@modelcontextprotocol/ext-apps`).
 - `src/human.ts`: human operations shared by REST and `canvas_*` tools (same save rule on both paths).
+- `src/export.ts` + `src/filename.ts`: `.bpmn` file names and HMAC-signed download links (`/dl/<token>`, one revision, ~10 min); `src/auth.ts`: OAuth resource server for `/mcp` (Keycloak).
 - `src/store.ts`: diagrams = revisions (full XML, author, version) + comments; JSON file persistence, optimistic concurrency via `baseVersion` (409).
 - `src/model.ts`: bpmn-moddle with the `pm:` extension (`src/moddle/process-meta.json`).
 - `src/validate.ts`: bpmn-moddle parse + bpmnlint (`recommended`, Miragon layout rules, project rules); severities in `src/lint/config.ts`.

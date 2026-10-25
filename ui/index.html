@@ -18,6 +18,9 @@
       .i[title] { cursor: pointer; }
       .i.error { color: #c92a2a; }
       .i.warning { color: #a65e00; }
+      .bar { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+      #export-panel { border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin: 6px 0; }
+      #export-text { font-family: ui-monospace, monospace; font-size: 11px; }
       .hint { display: block; font-size: 12px; color: #666; margin: 4px 0; }
       .c.ai-request { border-color: #4c6ef5; }
       .c .done { display: block; margin-top: 4px; color: #2b8a3e; }
@@ -30,6 +33,16 @@
       <div id="canvas"></div>
       <div id="side">
         <div id="status">Loading…</div>
+        <div class="bar">
+          <button id="dl-bpmn" title="Latest saved revision, standard BPMN 2.0">Télécharger .bpmn</button>
+          <button id="dl-svg">Télécharger SVG</button>
+        </div>
+        <div id="export-panel" hidden>
+          <div class="hint" id="export-msg">Download blocked here: copy the XML and save it as a .bpmn file.</div>
+          <textarea id="export-text" rows="8" readonly></textarea>
+          <button id="export-copy">Copier</button>
+          <button id="export-close">Fermer</button>
+        </div>
         <div><b id="sel">No element selected</b></div>
         <textarea id="txt" rows="3" placeholder="Comment on the selected element"></textarea>
         <label class="hint"><input type="checkbox" id="for-ai" checked /> Request for the AI</label>

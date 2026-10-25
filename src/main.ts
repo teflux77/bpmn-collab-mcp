@@ -23,7 +23,11 @@ const oauth = OAUTH_ISSUER
     }
   : undefined;
 
-const app = createApp({ store: new Store(DATA_DIR), publicUrl: PUBLIC_URL, allowedHosts: ALLOWED_HOSTS, oauth });
+// Signed download links (export_diagram): set in the server env file, never logged.
+const EXPORT_SIGNING_SECRET = process.env.EXPORT_SIGNING_SECRET?.trim() || undefined;
+if (!EXPORT_SIGNING_SECRET) console.warn("EXPORT_SIGNING_SECRET not set: download links stop working after a restart");
+
+const app = createApp({ store: new Store(DATA_DIR), publicUrl: PUBLIC_URL, allowedHosts: ALLOWED_HOSTS, oauth, exportSecret: EXPORT_SIGNING_SECRET });
 app.listen(PORT, HOST, () =>
   console.log(`bpmn-collab-mcp listening on http://${HOST}:${PORT} (data: ${DATA_DIR}, /mcp auth: ${oauth ? `OAuth ${oauth.issuer}` : "none"})`),
 );
