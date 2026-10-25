@@ -37,5 +37,18 @@ export const lintConfig = {
     "pm/abstraction-level": "warn",
     "pm/user-task-form": "info",
     "pm/rule-task-decision": "info",
+
+    // layout (docs/legacy/SKILL.md conventions): warnings returned to the AI to fix.
+    // Missing DI stays an error through no-bpmndi above.
+    "no-overlapping-elements": "warn",
+    "pm/label-overlap": "warn",
+    "pm/shared-attachment-point": "warn",
+    "pm/gateway-label-bounds": "warn",
+    "@miragon/rules/flow-through-element": "warn",
+    "@miragon/rules/flow-connection-side": "warn",
+    "@miragon/rules/flow-orthogonal": "warn",
+    "@miragon/rules/flow-target-alignment": "warn",
+    "@miragon/rules/exclusive-gateway-marker-visible": "warn",
+    "@miragon/rules/flow-crossing": "info", // sometimes unavoidable: hint only
   },
 };

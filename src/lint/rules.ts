@@ -4,6 +4,7 @@
  * can move to a published bpmnlint-plugin-* package unchanged.
  */
 import { metaOf } from "../model.js";
+import { layoutRules } from "../layout-check.js";
 
 interface Reporter {
   report(id: string, message: string, path?: (string | number)[]): void;
@@ -71,4 +72,5 @@ export const pmRules: Record<string, RuleFactory> = {
   "rule-task-decision": ruleTaskDecision,
   "abstraction-level": abstractionLevel,
   "gateway-flow-label": gatewayFlowLabel,
+  ...layoutRules,
 };
