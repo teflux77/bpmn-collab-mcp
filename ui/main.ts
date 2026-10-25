@@ -1,7 +1,9 @@
 import "bpmn-js/dist/assets/diagram-js.css";
 import "bpmn-js/dist/assets/bpmn-js.css";
 import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
+import "diagram-js-minimap/assets/diagram-js-minimap.css";
 import BpmnModeler from "bpmn-js/lib/Modeler";
+import minimapModule from "diagram-js-minimap";
 import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
 import { contentBox, fitViewbox, needsRefit } from "./view";
@@ -31,7 +33,16 @@ const author = authorName();
 
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
 // Register the pm: descriptor so pm:Meta in extensionElements is typed (read and written back as-is).
-const modeler: any = new BpmnModeler({ container: "#canvas", moddleExtensions: { pm: processMeta } });
+const modeler: any = new BpmnModeler({
+  container: "#canvas",
+  moddleExtensions: { pm: processMeta },
+  // Official bpmn.io minimap: the viewport rectangle can be dragged to scroll the diagram.
+  additionalModules: [minimapModule],
+  minimap: { open: true },
+});
+// Shown at the bottom of the side panel, not over the canvas (it positions itself from its own element).
+const minimapEl = document.querySelector("#canvas .djs-minimap");
+if (minimapEl) $("#minimap-slot").appendChild(minimapEl);
 
 let backend: Backend = restBackend;
 let id: string | null = params.get("id");

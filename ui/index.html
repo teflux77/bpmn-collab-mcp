@@ -26,6 +26,12 @@
       .bubble-thread textarea { width: 100%; box-sizing: border-box; font-size: 12px; }
       .djs-element.highlight .djs-visual > :first-child { stroke: #e8590c !important; stroke-width: 4px !important; }
       .c small.focus { cursor: pointer; text-decoration: underline dotted; }
+      /* Minimap (diagram-js-minimap) in the side panel: only the frame (whole diagram) and the viewport */
+      #minimap-slot { display: flex; justify-content: flex-end; margin-top: 10px; }
+      #minimap-slot .djs-minimap { position: relative; top: auto; right: auto; z-index: auto; }
+      /* the map frame stands for the whole diagram; the module's translucent overlay stays above it */
+      #minimap-slot .djs-minimap .map { width: 220px; height: 130px; background: #eef1f4; }
+      #minimap-slot .djs-minimap .map svg > g:first-child { display: none; } /* no drawing of the diagram */
       #orphans { border: 1px dashed #c92a2a; border-radius: 6px; padding: 4px 6px; margin: 6px 0; }
       @media (max-width: 760px) {
         #app { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; min-height: 100%; }
@@ -111,6 +117,7 @@
         <hr />
         <div id="orphans" hidden></div>
         <div id="list"></div>
+        <div id="minimap-slot" title="Glisser le rectangle orange pour se déplacer dans le diagramme"></div>
       </div>
     </div>
     <script type="module" src="./main.ts"></script>
