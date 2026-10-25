@@ -47,6 +47,7 @@ async function load() {
   if (code !== 200) return status(`Cannot load diagram: ${d.error}`);
   version = d.version;
   diagramName = d.name ?? diagramName;
+  showTitle();
   comments = d.comments;
   issues = d.issues ?? [];
   const { warnings } = await modeler.importXML(d.xml);
@@ -440,12 +441,50 @@ async function exportSvg() {
   return svgWithComments(svg, planOverlays(comments as CanvasComment[], { ...prefs, show: true }, bounds), bounds);
 }
 
+// ---- Diagram name: shown as the title, renamed in place ----
+function showTitle() {
+  $("#title").textContent = diagramName;
+  document.title = `${diagramName} · BPMN`;
+}
+
+function editTitle() {
+  const title = $("#title");
+  if (title.querySelector("input")) return;
+  const input = Object.assign(document.createElement("input"), { value: diagramName, maxLength: 120 });
+  title.textContent = "";
+  title.appendChild(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save: boolean) => {
+    if (done) return;
+    done = true;
+    const name = input.value.trim();
+    if (save && name && name !== diagramName) {
+      const r = await backend.rename(id!, name);
+      if (r.status === 200) {
+        diagramName = r.body.name;
+        status("Renamed");
+      } else status(`Rename failed: ${r.body.error}`);
+    }
+    showTitle();
+  };
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") void finish(true);
+    if (e.key === "Escape") void finish(false);
+  };
+  input.onblur = () => void finish(true);
+}
+$("#title").onclick = editTitle;
+$("#title").onkeydown = (e) => e.key === "Enter" && editTitle();
+
 async function start() {
   if (inline) {
     status("Connecting to Claude…");
     const app = await appBackend();
     backend = app.backend;
     $("#hint").textContent = "Tick “Request for the AI”, then “Ask Claude to apply now” to send it to the conversation.";
+    $("#back").hidden = true; // the list of diagrams is a web page, outside the chat
     id = await app.diagramId;
   }
   if (!id) return status("Missing ?id=");

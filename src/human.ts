@@ -2,7 +2,7 @@
  * Human-side operations, shared by the REST API (standalone canvas) and the app-only
  * MCP tools (canvas rendered inline in Claude). Results carry an HTTP-like status.
  */
-import { Store, StoreError, type Comment } from "./store.js";
+import { Store, StoreError, cleanName, type Comment } from "./store.js";
 import { validateXml } from "./validate.js";
 import { parse } from "./model.js";
 import { diffXml } from "./diff.js";
@@ -22,6 +22,25 @@ const fromStoreError = (e: unknown): Outcome => {
 export async function checkAnchor(xml: string, elementId: string) {
   const { elementsById } = await parse(xml);
   return elementsById[elementId] ? undefined : `Element ${elementId} does not exist in the current diagram`;
+}
+
+export function createFromHuman(store: Store, name: unknown, author?: string): Outcome {
+  const n = cleanName(name);
+  if ("error" in n) return { status: 400, body: { error: n.error } };
+  const d = store.create(n.name, undefined, `human:${author ?? "anonymous"}`);
+  return { status: 201, body: { id: d.id, name: d.name, version: 1 } };
+}
+
+/** Renames a diagram (human or AI); the id, revisions and comments are unchanged. */
+export function renameDiagram(store: Store, id: string, name: unknown): Outcome {
+  const n = cleanName(name);
+  if ("error" in n) return { status: 400, body: { error: n.error } };
+  try {
+    const d = store.rename(id, n.name);
+    return { status: 200, body: { id: d.id, name: d.name } };
+  } catch (e) {
+    return fromStoreError(e);
+  }
 }
 
 export async function loadForHuman(store: Store, id: string): Promise<Outcome> {

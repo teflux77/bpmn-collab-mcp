@@ -31,7 +31,8 @@ npm start            # http://localhost:7860 (listens on 127.0.0.1; set HOST=0.0
 ```
 
 - MCP endpoint (streamable HTTP, stateless): `http://localhost:7860/mcp`
-- Human canvas: `http://localhost:7860/canvas?id=<diagramId>` (the id and URL are returned by `create_diagram`)
+- Home page `http://localhost:7860/`: list of diagrams (search, open in the web canvas, create a new one).
+- Human canvas: `http://localhost:7860/canvas?id=<diagramId>` (the name is the title: click to rename) (the id and URL are returned by `create_diagram`)
 - Inline canvas: in hosts that support MCP Apps (Claude web/Desktop), `create_diagram` and `get_diagram` render the same canvas in the conversation (`ui://bpmn-collab/canvas.html`); it talks to the server through app-only `canvas_*` tools and can post "apply the open AI requests" into the chat.
 - Canvas: zoom bar (−, +, Ajuster, 100 %, level shown; Ctrl/Cmd + wheel and trackpad pinch from diagram-js), comments drawn as bubbles on their element (AI blue, human orange, resolved grey; click to read the thread and reply), filters show/hide, open/resolved/all, human/AI (remembered in localStorage when available), orphan comments of deleted elements kept in the side panel, click a comment to centre and highlight its element; stacked layout on narrow screens.
 - Export: canvas buttons *Télécharger .bpmn* / *Télécharger SVG* (inline in Claude the host performs the download, with a signed link and a copy/paste panel as fallbacks), `GET /api/diagrams/:id/export.bpmn`, and signed links from `export_diagram`.
@@ -47,7 +48,7 @@ npx @modelcontextprotocol/inspector
 
 | Tool | Purpose |
 |---|---|
-| `create_diagram` / `list_diagrams` | Start or list diagrams |
+| `create_diagram` / `list_diagrams` / `rename_diagram` | Start, list (most recent first, with each web `canvasUrl`) or rename diagrams |
 | `get_diagram` | Current XML (with human edits) + open comments |
 | `get_changes_since` | Semantic diff by element id between versions (bpmn-js-differ + `pm:` metadata): added, removed, modified fields, moved |
 | `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated; XML without DI is auto-laid out until a human edits). Returns open issues and a **loop guard** (`loop_guard: true` = stop and ask the human: same issues after two AI saves, oscillation, growing or newly introduced issues) |

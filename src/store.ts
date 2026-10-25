@@ -75,6 +75,16 @@ export class StoreError extends Error {
 }
 const notFound = (m: string) => new StoreError(404, m);
 
+/** Diagram names: trimmed, 1-120 characters, no control characters. Returns the clean name or an error. */
+export function cleanName(name: unknown): { name: string } | { error: string } {
+  if (typeof name !== "string") return { error: "name is required" };
+  const n = name.replace(/\s+/g, " ").trim();
+  if (!n) return { error: "name is required" };
+  if (n.length > 120) return { error: "name is too long (120 characters max)" };
+  if (/[\u0000-\u001f\u007f]/.test(n)) return { error: "name contains control characters" };
+  return { name: n };
+}
+
 export class Store {
   private diagrams = new Map<string, Diagram>();
   private readonly file: string;
@@ -103,12 +113,30 @@ export class Store {
     fs.renameSync(tmp, this.file);
   }
 
+  /** Summaries, most recently modified first. */
   list() {
-    return [...this.diagrams.values()].map((d) => ({
-      id: d.id,
-      name: d.name,
-      version: this.latest(d).version,
-    }));
+    return [...this.diagrams.values()]
+      .map((d) => {
+        const last = this.latest(d);
+        return {
+          id: d.id,
+          name: d.name,
+          version: last.version,
+          updatedAt: last.at,
+          lastAuthor: last.author,
+          createdAt: d.revisions[0].at,
+          openComments: d.comments.filter((c) => c.status === "open").length,
+        };
+      })
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  rename(id: string, name: string) {
+    const d = this.diagrams.get(id);
+    if (!d) throw notFound(`Diagram ${id} not found`);
+    d.name = name;
+    this.persist();
+    return d;
   }
 
   get(id: string) {

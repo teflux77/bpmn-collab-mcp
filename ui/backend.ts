@@ -22,6 +22,7 @@ export interface Backend {
   askHost?(text: string): Promise<void>;
   /** Saves a file on the user's device; false when the environment refused it. */
   download(fileName: string, mimeType: string, content: string): Promise<boolean>;
+  rename(id: string, name: string): Promise<Result>;
   /** Sets a lint issue aside (with a reason) or restores it. */
   dismissIssue(id: string, fingerprint: string, reason: string, author: string): Promise<Result>;
   restoreIssue(id: string, fingerprint: string): Promise<Result>;
@@ -46,6 +47,7 @@ const rest = async (r: Response): Promise<Result> => ({ status: r.status, body: 
 export const restBackend: Backend = {
   canMessageHost: false,
   download: async (fileName, mimeType, content) => browserDownload(fileName, mimeType, content),
+  rename: async (id, name) => rest(await fetch(`/api/diagrams/${id}`, { method: "PATCH", headers: json, body: JSON.stringify({ name }) })),
   dismissIssue: async (id, fp, reason, author) =>
     rest(await fetch(`/api/diagrams/${id}/issues/${fp}/dismiss`, { method: "POST", headers: json, body: JSON.stringify({ reason, author }) })),
   restoreIssue: async (id, fp) => rest(await fetch(`/api/diagrams/${id}/issues/${fp}/restore`, { method: "POST", headers: json, body: "{}" })),
@@ -88,6 +90,7 @@ export async function appBackend(): Promise<{ backend: Backend; diagramId: Promi
     askHost: async (text) => {
       await app.sendMessage({ role: "user", content: [{ type: "text", text }] });
     },
+    rename: (id, name) => call("canvas_rename", { id, name }),
     dismissIssue: (id, fingerprint, reason, author) => call("canvas_dismiss_issue", { id, fingerprint, reason, author }),
     restoreIssue: (id, fingerprint) => call("canvas_restore_issue", { id, fingerprint }),
     // The sandboxed iframe cannot download by itself: the host does it (with its own confirmation).

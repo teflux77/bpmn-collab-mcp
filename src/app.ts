@@ -5,7 +5,7 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { hostHeaderValidation } from "@modelcontextprotocol/express";
 import { Store } from "./store.js";
 import { buildMcp } from "./mcp.js";
-import { commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
+import { commentFromHuman, createFromHuman, loadForHuman, renameDiagram, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { mountOAuth, type OAuthConfig } from "./auth.js";
 import { ExportSigner, exportFileName } from "./export.js";
 import { dismissIssue, restoreIssue } from "./triage.js";
@@ -67,6 +67,9 @@ export function createApp(opts: AppOptions) {
 
   // ---- REST used by the standalone canvas ----
   const send = (res: express.Response, o: Outcome) => void res.status(o.status).json(o.body);
+  app.get("/api/diagrams", (_req, res) => void res.json(store.list()));
+  app.post("/api/diagrams", (req, res) => send(res, createFromHuman(store, req.body?.name, req.body?.author)));
+  app.patch("/api/diagrams/:id", (req, res) => send(res, renameDiagram(store, req.params.id, req.body?.name)));
   app.get("/api/diagrams/:id", async (req, res) => send(res, await loadForHuman(store, req.params.id)));
   app.put("/api/diagrams/:id", async (req, res) => {
     const { xml, baseVersion, author } = req.body ?? {};
@@ -88,9 +91,8 @@ export function createApp(opts: AppOptions) {
   // ---- Canvas (built bpmn-js app, single self-contained HTML file) ----
   app.get("/canvas", (_req, res) => res.sendFile(path.join(uiDir, "index.html")));
   app.use(express.static(uiDir, { index: false })); // non-inlined assets (bpmn-font svg fallback)
-  app.get("/", (_req, res) => {
-    res.send("bpmn-collab-mcp is running. MCP endpoint: /mcp");
-  });
+  // Home: the list of diagrams to open in the web canvas (outside the chat), and creation.
+  app.get("/", (_req, res) => res.sendFile(path.join(uiDir, "home.html")));
 
   return app;
 }

@@ -6,7 +6,7 @@ import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@model
 import { Store, StoreError, openComments } from "./store.js";
 import { validateXml } from "./validate.js";
 import { diffXml } from "./diff.js";
-import { checkAnchor, commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
+import { checkAnchor, commentFromHuman, loadForHuman, renameDiagram, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { autoLayout, hasDi } from "./autolayout.js";
 import { exportFileName, type ExportSigner } from "./export.js";
 import { guardAiSave, openIssues, summarize, triage } from "./issues.js";
@@ -67,8 +67,13 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
 
   s.registerTool(
     "list_diagrams",
-    { description: "List all diagrams with their current version.", inputSchema: z.object({}) },
-    async () => text(store.list()),
+    {
+      description:
+        "List all diagrams, most recently modified first: id, name, version, updatedAt, lastAuthor, openComments and canvasUrl " +
+        "(the web canvas, outside the chat). Show them to the user as a list of clickable Markdown links named after the diagram.",
+      inputSchema: z.object({}),
+    },
+    async () => text(store.list().map((d) => ({ ...d, canvasUrl: `${publicUrl}/canvas?id=${d.id}` }))),
   );
 
   registerAppTool(
@@ -120,6 +125,15 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
   );
 
   s.registerTool(
+    "rename_diagram",
+    {
+      description: "Give a diagram a new name (1-120 characters). The id, revisions and comments are unchanged; export file names follow the new name.",
+      inputSchema: z.object({ id: z.string(), name: z.string() }),
+    },
+    async ({ id, name }) => outcome(renameDiagram(store, id, name)),
+  );
+
+  s.registerTool(
     "get_changes_since",
     {
       description: "Semantic diff (added/removed/modified elements by id) between a past version and the current one. Use it to see what the human changed.",
@@ -148,7 +162,9 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
     async ({ id, xml: submitted, baseVersion, note }) => {
       const d = store.get(id);
       if (!d) return fail({ error: "not found" });
-      const prepared = await withLayout(submitted, d.revisions.some((r) => r.author.startsWith("human:")));
+      // A human revision counts once it is an edit: version 1 created from the web is the empty template.
+      const humanEdited = d.revisions.some((r) => r.author.startsWith("human:") && r.version > 1);
+      const prepared = await withLayout(submitted, humanEdited);
       if (prepared.refused) return fail({ error: prepared.refused });
       const { xml, layout } = prepared;
       const issues = triage(await validateXml(xml), d.dismissed);
@@ -328,6 +344,13 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
       _meta: appOnly,
     },
     async ({ id, commentId, status, author }) => outcome(setStatusFromHuman(store, id, commentId, status, author)),
+  );
+
+  registerAppTool(
+    s,
+    "canvas_rename",
+    { description: "Canvas: the human renames the diagram.", inputSchema: z.object({ id: z.string(), name: z.string() }), _meta: appOnly },
+    async ({ id, name }) => outcome(renameDiagram(store, id, name)),
   );
 
   registerAppTool(

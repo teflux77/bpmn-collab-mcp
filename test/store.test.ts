@@ -20,7 +20,7 @@ describe("Store", () => {
     const d = s.create("Order & <returns>");
     expect(s.latest(d)).toMatchObject({ version: 1, author: "ai" });
     expect(s.latest(d).xml).toContain('name="Order &amp; &lt;returns&gt;"');
-    expect(s.list()).toEqual([{ id: d.id, name: "Order & <returns>", version: 1 }]);
+    expect(s.list()).toEqual([expect.objectContaining({ id: d.id, name: "Order & <returns>", version: 1, lastAuthor: "ai", openComments: 0 })]);
   });
 
   it("produces an empty template that parses and has no errors", async () => {

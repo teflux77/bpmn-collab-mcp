@@ -45,6 +45,10 @@
       .i.dismissed { color: #999; }
       .i button { font-size: 11px; margin-left: 4px; }
       .i span[title] { cursor: pointer; }
+      #back { font-size: 12px; }
+      #title { font-size: 16px; margin: 4px 0; cursor: text; word-break: break-word; }
+      #title:hover { background: #f3f3f3; }
+      #title input { font: inherit; width: 100%; box-sizing: border-box; }
       .bar { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
       #export-panel { border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin: 6px 0; }
       #export-text { font-family: ui-monospace, monospace; font-size: 11px; }
@@ -68,6 +72,8 @@
         </div>
       </div>
       <div id="side">
+        <a id="back" href="/">← Tous les diagrammes</a>
+        <h2 id="title" title="Cliquer pour renommer" tabindex="0">…</h2>
         <div id="status">Loading…</div>
         <div class="bar">
           <button id="dl-bpmn" title="Latest saved revision, standard BPMN 2.0">Télécharger .bpmn</button>

@@ -53,6 +53,10 @@ End with a summary: **X fixed, Y dismissed (with reasons), Z waiting for the hum
 - Put business data in `bpmn:extensionElements` using `pm:Meta` (owner, system, sla, kpi, formRef, decisionRef), not in separate notes.
 - Pools = organizations, lanes = roles; use message flows only between pools.
 
+## Finding and naming diagrams
+- `list_diagrams` returns each diagram with its `canvasUrl`: show them as clickable Markdown links named after the diagram, most recent first, so the user can open one in the browser outside the chat. The home page `/` lists them too.
+- Give new diagrams a clear name (process name: verb + object, e.g. "Handle customer order"); `rename_diagram` when the user asks or the scope changed.
+
 ## Export
 When the user wants the file, call `export_diagram` and give the `downloadUrl` as a clickable Markdown link with the file name (it expires after about 10 minutes and works on a phone without the canvas login). Do not paste the whole XML in the chat unless asked; never assume the chat can display a file returned by a tool.
 

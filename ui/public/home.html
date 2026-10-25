@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Diagrammes BPMN</title>
+    <style>
+      :root { color-scheme: light; }
+      body { margin: 0; font-family: system-ui, sans-serif; background: #fafafa; color: #222; }
+      main { max-width: 900px; margin: 0 auto; padding: 16px; }
+      h1 { font-size: 20px; margin: 8px 0 16px; }
+      .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+      .bar input { flex: 1 1 220px; padding: 6px 8px; font-size: 14px; }
+      .bar button { padding: 6px 12px; font-size: 14px; }
+      table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #ddd; }
+      th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 14px; }
+      th { background: #f3f3f3; font-weight: 600; }
+      td.num { text-align: right; white-space: nowrap; }
+      a.open { font-weight: 600; }
+      #msg { min-height: 1.2em; font-size: 13px; color: #a61e4d; margin-bottom: 8px; }
+      .muted { color: #777; font-size: 12px; }
+      @media (max-width: 640px) { .hide-sm { display: none; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Diagrammes BPMN</h1>
+      <form class="bar" id="create">
+        <input id="new-name" maxlength="120" placeholder="Nom du nouveau diagramme" aria-label="Nom du nouveau diagramme" />
+        <button type="submit">Créer</button>
+      </form>
+      <div class="bar"><input id="search" type="search" placeholder="Rechercher par nom" aria-label="Rechercher" /></div>
+      <div id="msg"></div>
+      <table>
+        <thead>
+          <tr><th>Nom</th><th class="num">Version</th><th class="hide-sm">Modifié</th><th class="num hide-sm">Commentaires ouverts</th><th></th></tr>
+        </thead>
+        <tbody id="rows"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody>
+      </table>
+      <p class="muted">Ouvre le canevas dans ce navigateur, hors du chat. Les diagrammes sont triés du plus récent au plus ancien.</p>
+    </main>
+    <script>
+      // Plain script (no build step). Names are user data: always inserted with textContent.
+      const $ = (s) => document.querySelector(s);
+      let all = [];
+      const fmt = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+      const who = (a) => (a === "ai" ? "IA" : String(a).replace(/^human:/, ""));
+      const author = (() => { try { return localStorage.getItem("author") || "anonymous"; } catch { return "anonymous"; } })();
+
+      function render() {
+        const q = $("#search").value.trim().toLowerCase();
+        const rows = all.filter((d) => d.name.toLowerCase().includes(q));
+        const body = $("#rows");
+        body.innerHTML = "";
+        if (!rows.length) {
+          const tr = body.insertRow();
+          const td = tr.insertCell();
+          td.colSpan = 5;
+          td.className = "muted";
+          td.textContent = all.length ? "Aucun diagramme ne correspond." : "Aucun diagramme pour l'instant : crée le premier ci-dessus.";
+          return;
+        }
+        for (const d of rows) {
+          const tr = body.insertRow();
+          const name = tr.insertCell();
+          const link = document.createElement("a");
+          link.href = `/canvas?id=${encodeURIComponent(d.id)}`;
+          link.textContent = d.name;
+          name.appendChild(link);
+          const v = tr.insertCell(); v.className = "num"; v.textContent = `v${d.version}`;
+          const m = tr.insertCell(); m.className = "hide-sm"; m.textContent = `${fmt(d.updatedAt)} · ${who(d.lastAuthor)}`;
+          const c = tr.insertCell(); c.className = "num hide-sm"; c.textContent = String(d.openComments);
+          const o = tr.insertCell();
+          const open = document.createElement("a");
+          open.className = "open"; open.href = link.href; open.textContent = "Ouvrir";
+          o.appendChild(open);
+        }
+      }
+
+      async function load() {
+        try {
+          const r = await fetch("/api/diagrams");
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          all = await r.json();
+          render();
+        } catch (e) {
+          $("#msg").textContent = `Impossible de charger la liste : ${e.message}`;
+        }
+      }
+
+      $("#create").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("#new-name").value.trim();
+        if (!name) return $("#new-name").focus();
+        const r = await fetch("/api/diagrams", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, author }) });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) return ($("#msg").textContent = body.error || `Création impossible (HTTP ${r.status})`);
+        location.href = `/canvas?id=${encodeURIComponent(body.id)}`;
+      });
+      $("#search").addEventListener("input", render);
+      load();
+    </script>
+  </body>
+</html>
