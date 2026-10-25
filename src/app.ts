@@ -6,6 +6,7 @@ import { hostHeaderValidation } from "@modelcontextprotocol/express";
 import { Store } from "./store.js";
 import { buildMcp } from "./mcp.js";
 import { commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
+import { mountOAuth, type OAuthConfig } from "./auth.js";
 
 export interface AppOptions {
   store: Store;
@@ -13,6 +14,8 @@ export interface AppOptions {
   uiDir?: string;
   /** Extra Host header values to accept besides localhost and the PUBLIC_URL host. */
   allowedHosts?: string[];
+  /** When set, /mcp requires an OAuth access token from this issuer for an allowlisted user. */
+  oauth?: OAuthConfig;
 }
 
 export function createApp(opts: AppOptions) {
@@ -26,7 +29,8 @@ export function createApp(opts: AppOptions) {
 
   // ---- MCP endpoint: one server per request (stateless), 2026 protocol + legacy fallback ----
   const mcp = toNodeHandler(createMcpHandler(() => buildMcp({ store, publicUrl: opts.publicUrl, uiDir })));
-  app.all("/mcp", (req, res) => mcp(req, res, req.body));
+  const guard = opts.oauth ? mountOAuth(app, opts.oauth) : [];
+  app.all("/mcp", ...guard, (req, res) => mcp(req, res, req.body));
 
   // ---- REST used by the standalone canvas ----
   const send = (res: express.Response, o: Outcome) => void res.status(o.status).json(o.body);
