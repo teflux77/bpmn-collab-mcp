@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentBox, needsRefit } from "../ui/view.js";
+import { contentBox, fitViewbox, needsRefit } from "../ui/view.js";
 import { autoLayout } from "../src/autolayout.js";
 import { parse } from "../src/model.js";
 
@@ -47,5 +47,41 @@ describe("auto-layout drill-down planes start near the origin", () => {
     );
     expect(Math.min(...xs)).toBe(100);
     expect(Math.min(...ys)).toBe(100);
+  });
+});
+
+describe("fit to the free area (Ajuster)", () => {
+  const container = { width: 1200, height: 700 };
+  const insets = { left: 92, top: 52, right: 24, bottom: 24 }; // palette 20 + 48 + margin, zoom bar
+  /** Screen rectangle where the content is drawn for a given viewbox. */
+  const onScreen = (c: { x: number; y: number; width: number; height: number }, v: ReturnType<typeof fitViewbox>) => ({
+    left: (c.x - v.x) * v.scale,
+    top: (c.y - v.y) * v.scale,
+    right: (c.x + c.width - v.x) * v.scale,
+    bottom: (c.y + c.height - v.y) * v.scale,
+  });
+
+  it("keeps a wide diagram clear of the palette and inside the margins", () => {
+    const content = { x: 160, y: 40, width: 2940, height: 980 };
+    const s = onScreen(content, fitViewbox(content, container, insets));
+    expect(s.left).toBeGreaterThanOrEqual(insets.left - 0.01);
+    expect(s.right).toBeLessThanOrEqual(container.width - insets.right + 0.01);
+    expect(s.top).toBeGreaterThanOrEqual(insets.top - 0.01);
+    expect(s.bottom).toBeLessThanOrEqual(container.height - insets.bottom + 0.01);
+  });
+
+  it("centres a small diagram in the free area without zooming above the maximum", () => {
+    const content = { x: 100, y: 100, width: 200, height: 100 };
+    const v = fitViewbox(content, container, insets);
+    expect(v.scale).toBe(1.5);
+    const s = onScreen(content, v);
+    const freeCentreX = insets.left + (container.width - insets.left - insets.right) / 2;
+    expect((s.left + s.right) / 2).toBeCloseTo(freeCentreX, 5);
+  });
+
+  it("returns a viewbox covering the whole container at that scale", () => {
+    const v = fitViewbox({ x: 0, y: 0, width: 1000, height: 500 }, container, insets);
+    expect(v.width * v.scale).toBeCloseTo(container.width, 5);
+    expect(v.height * v.scale).toBeCloseTo(container.height, 5);
   });
 });

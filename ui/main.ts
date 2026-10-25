@@ -4,7 +4,7 @@ import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
-import { contentBox, needsRefit } from "./view";
+import { contentBox, fitViewbox, needsRefit } from "./view";
 import { exportFileName } from "../src/filename";
 import {
   applyOverlays, authorLabel, isAi, loadPrefs, orphans, planOverlays, preview, savePrefs, svgWithComments, thread,
@@ -53,7 +53,7 @@ async function load() {
   issues = d.issues ?? [];
   const { warnings } = await modeler.importXML(d.xml);
   if (warnings.length) console.warn("import warnings", warnings);
-  modeler.get("canvas").zoom("fit-viewport");
+  fitToFreeArea();
   dirty = false;
   status(`v${version} loaded`);
   render();
@@ -302,7 +302,29 @@ const showZoom = () => ($("#zoom-level").textContent = `${Math.round(canvas.zoom
 const zoomTo = (z: number) => canvas.zoom(Math.min(4, Math.max(0.2, z)), "auto");
 $("#zoom-in").onclick = () => zoomTo(canvas.zoom() * 1.25);
 $("#zoom-out").onclick = () => zoomTo(canvas.zoom() / 1.25);
-$("#zoom-fit").onclick = () => canvas.zoom("fit-viewport", "auto");
+$("#zoom-fit").onclick = () => fitToFreeArea();
+
+/**
+ * Like fit-viewport, but keeps the content clear of the palette (left) and the zoom bar (top),
+ * measured on screen, with a margin around it.
+ */
+function fitToFreeArea() {
+  const root = canvas.getRootElement();
+  const content = contentBox(modeler.get("elementRegistry").filter((e: any) => e.parent === root));
+  if (!content) return;
+  const box = $("#canvas").getBoundingClientRect();
+  const palette = document.querySelector("#canvas .djs-palette")?.getBoundingClientRect();
+  const bar = $("#zoom-bar").getBoundingClientRect();
+  const margin = 24;
+  const insets = {
+    left: palette && palette.width ? palette.right - box.left + margin : margin,
+    top: Math.max(margin, bar.bottom - box.top + 8),
+    right: margin,
+    bottom: margin,
+  };
+  const { scale, ...viewbox } = fitViewbox(content, { width: box.width, height: box.height }, insets);
+  canvas.viewbox(viewbox);
+}
 $("#zoom-reset").onclick = () => zoomTo(1);
 modeler.on("canvas.viewbox.changed", showZoom);
 
@@ -429,7 +451,7 @@ modeler.on("root.set", () => renderOverlays());
 modeler.on("root.set", 500, () => {
   const root = canvas.getRootElement();
   const content = contentBox(modeler.get("elementRegistry").filter((e: any) => e.parent === root));
-  if (needsRefit(canvas.viewbox(), content)) canvas.zoom("fit-viewport", "auto");
+  if (needsRefit(canvas.viewbox(), content)) fitToFreeArea();
 });
 
 function applyPrefs(next: CommentPrefs) {

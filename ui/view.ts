@@ -39,3 +39,25 @@ export function needsRefit(viewbox: Box, content: Box | undefined, minShare = 0.
   const h = Math.max(0, Math.min(viewbox.y + viewbox.height, content.y + content.height) - Math.max(viewbox.y, content.y));
   return (w * h) / (content.width * content.height) < minShare;
 }
+
+export interface Insets {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * Viewbox (diagram coordinates) that fits `content` in the free part of the canvas: the container
+ * minus `insets` in screen pixels (palette on the left, zoom bar on top, margins). The content is
+ * centred in that free area and never zoomed above `maxZoom`.
+ */
+export function fitViewbox(content: Box, container: { width: number; height: number }, insets: Insets, maxZoom = 1.5): Box & { scale: number } {
+  const freeW = Math.max(40, container.width - insets.left - insets.right);
+  const freeH = Math.max(40, container.height - insets.top - insets.bottom);
+  const scale = Math.min(maxZoom, freeW / Math.max(content.width, 1), freeH / Math.max(content.height, 1));
+  // screen position of the content's top-left corner, centred in the free area
+  const left = insets.left + (freeW - content.width * scale) / 2;
+  const top = insets.top + (freeH - content.height * scale) / 2;
+  return { x: content.x - left / scale, y: content.y - top / scale, width: container.width / scale, height: container.height / scale, scale };
+}
