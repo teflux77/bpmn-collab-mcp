@@ -65,6 +65,23 @@ ssh deploy@<VPS_IP> 'sudo reboot'  # then check the diagrams are still listed (d
 
 In Claude (web/Desktop): Settings → Connectors → Add custom connector → `https://bpmn.teflux.dev/mcp`. `create_diagram` / `get_diagram` then render the canvas inline (MCP Apps).
 
+## SSH access (key in 1Password, Windows)
+
+The SSH key lives in 1Password ("Hetzner Teflux"); only its public half is on disk. `~/.ssh/config`:
+
+```
+Host bpmn
+  HostName 204.168.251.62
+  User deploy
+  IdentityFile ~/.ssh/hetzner_teflux.pub   # public key only: 1Password signs
+  IdentitiesOnly yes                        # offer only this key
+```
+
+- Without `IdentitiesOnly`, the 1Password agent offers every key it holds and the server may close the connection after `MaxAuthTries` before reaching the right one.
+- Use Windows OpenSSH (`C:\Windows\System32\OpenSSH\ssh.exe`, the default `ssh` in PowerShell): it talks to the 1Password agent pipe. Git Bash's `ssh` does not.
+- Hetzner injects SSH keys only when a server is created: a key added to the project afterwards is not on the server. Add it to `authorized_keys` through an existing access (or rescue mode) instead of recreating the server.
+- When writing `~/.ssh/config` from PowerShell 5.1, avoid `Set-Content -Encoding utf8`: it adds a BOM that breaks the first line.
+
 ## Everyday operations
 
 - **Deploy**: push to `main`. CI runs the tests and publishes `latest` + `sha-<commit>`; the VPS picks it up within ~2 minutes (`journalctl -u bpmn-update`). Changes under `deploy/` are applied the same way (Caddy is reloaded when its configuration changes).
