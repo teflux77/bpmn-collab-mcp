@@ -48,7 +48,7 @@ npx @modelcontextprotocol/inspector
 | `create_diagram` / `list_diagrams` | Start or list diagrams |
 | `get_diagram` | Current XML (with human edits) + open comments |
 | `get_changes_since` | Semantic diff by element id between versions (bpmn-js-differ + `pm:` metadata): added, removed, modified fields, moved |
-| `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated) |
+| `update_diagram` | Save a revision (optimistic concurrency via `baseVersion`, validated; XML without DI is auto-laid out until a human edits) |
 | `validate_diagram` | Deterministic rules: bpmnlint `recommended`, layout rules from `@miragon/bpmnlint-plugin-rules`, project rules (`src/lint/`, `src/layout-check.ts`) |
 | `list_comments` / `add_comment` / `resolve_comment` | Element-anchored review threads; `ai-request` comments are human instructions the AI applies then resolves |
 | `export_diagram` | Plain BPMN XML |

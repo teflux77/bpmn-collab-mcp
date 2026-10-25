@@ -122,6 +122,24 @@ describe("MCP over streamable HTTP", () => {
     expect(merged.body).toMatchObject({ ok: true, version: 3 });
   });
 
+  it("lays out XML without DI on create, and on update while no human has edited", async () => {
+    const noDi = fixture("valid.bpmn").replace(/<bpmndi:BPMNDiagram[\s\S]*<\/bpmndi:BPMNDiagram>/, "");
+    const created = await call("create_diagram", { name: "No DI", xml: noDi });
+    expect(created.body).toMatchObject({ ok: true, layout: { mode: "auto", notes: [] }, issues: [] });
+    expect((await call("get_diagram", { id: created.body.id })).body.xml).toContain("<bpmndi:BPMNShape");
+
+    const updated = await call("update_diagram", { id: created.body.id, xml: noDi, baseVersion: 1 });
+    expect(updated.body).toMatchObject({ ok: true, version: 2, layout: { mode: "auto" } });
+  });
+
+  it("refuses XML without DI once a human has edited (would overwrite their positions)", async () => {
+    await putHuman(id, fixture("valid.bpmn"), 1);
+    const noDi = fixture("valid.bpmn").replace(/<bpmndi:BPMNDiagram[\s\S]*<\/bpmndi:BPMNDiagram>/, "");
+    const r = await call("update_diagram", { id, xml: noDi, baseVersion: 2 });
+    expect(r.isError).toBe(true);
+    expect(r.body.error).toMatch(/auto-layout would overwrite/);
+  });
+
   it("get_changes_since shows the human edit with its author", async () => {
     const humanXml = edit(
       fixture("valid.bpmn"),

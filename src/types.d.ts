@@ -24,3 +24,7 @@ declare module "bpmnlint" {
     lint(definitions: unknown): Promise<Record<string, { id?: string; message: string; category: string }[]>>;
   }
 }
+declare module "bpmn-auto-layout" {
+  /** Returns the XML with a newly computed DI for the first process. */
+  export function layoutProcess(xml: string): Promise<string>;
+}

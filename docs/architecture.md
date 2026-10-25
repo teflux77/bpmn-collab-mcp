@@ -46,4 +46,4 @@ References worth reading: APQC PCF, ArchiMate (Value Stream / Business Process),
 - MCP Apps: the inline canvas is wired (ext-apps 2.x on MCP SDK v2) but only testable in a host that renders apps, which needs a public HTTPS URL.
 - No authentication, in-memory + JSON file persistence.
 - bpmn-js-differ 3.2.0 does not track artifacts outside collaborations, ignores `extensionElements`, passes oldValue/newValue swapped, and throws when DI references a deleted element: `src/diff.ts` compensates (ids, artifacts, `pm:`, values read from both models, `partial` fallback).
-- Layout: the AI must produce BPMN DI (diagram interchange) coordinates, or an auto-layout step must be added (for example bpmn-auto-layout) before humans open the diagram.
+- Layout: AI XML without DI is laid out by `src/autolayout.ts` (bpmn-auto-layout 1.3.0 + completion pass for labels, data objects, annotations) only while no human has edited the diagram. bpmn-auto-layout lays out the first pool only and skips groups; it also draws a shape for `bpmn:DataObject`, removed by the completion pass.

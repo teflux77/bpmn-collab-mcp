@@ -33,6 +33,8 @@ Ask short clarifying questions when the business case is ambiguous (who approves
 - Never silently drop content or a comment: answer each one.
 
 ## Layout (DI)
+**Auto-layout**: for a new diagram (or while no human has edited it yet) you may send XML without any DI: the server lays it out (bpmn-auto-layout, then labels, data objects and annotations placed by these conventions) and returns `layout.notes` for what it could not place. Only the first pool of a collaboration is laid out, and groups are not: provide their DI yourself. Once a human has edited the diagram, XML without DI is refused: start from `get_diagram`, keep its DI and add DI for the elements you add.
+
 Every diagram carries complete BPMN DI: a `bpmndi:BPMNShape` with `dc:Bounds` for each node, data object reference, data store, annotation and group, and a `bpmndi:BPMNEdge` with waypoints for each sequence flow, message flow, association and data association. Missing DI is a validation error (`no-bpmndi`): bpmn-js does not draw the element, so the human can neither see nor comment on it. Standard sizes: task 100x80, event 36x36, gateway 50x50, data object 36x50, data store 50x50.
 
 The rule that checks each convention is given in brackets; all are warnings returned by `update_diagram`.

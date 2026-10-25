@@ -11,13 +11,13 @@ interface Reporter {
 }
 type RuleFactory = () => { check(node: any, reporter: Reporter): boolean | void };
 
-interface Rect {
+export interface Rect {
   x: number;
   y: number;
   width: number;
   height: number;
 }
-interface Point {
+export interface Point {
   x: number;
   y: number;
 }

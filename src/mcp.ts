@@ -7,6 +7,8 @@ import { Store, StoreError, openComments } from "./store.js";
 import { validateXml } from "./validate.js";
 import { diffXml } from "./diff.js";
 import { checkAnchor, commentFromHuman, loadForHuman, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
+import { autoLayout, hasDi } from "./autolayout.js";
+import { parse } from "./model.js";
 
 export interface McpOptions {
   store: Store;
@@ -28,6 +30,28 @@ const showCanvas = { ui: { resourceUri: CANVAS_URI } };
 /** Callable by the inline canvas only, hidden from the model. */
 const appOnly = { ui: { resourceUri: CANVAS_URI, visibility: ["app" as const] } };
 
+/**
+ * AI-submitted XML without any DI gets an automatic layout, unless that would overwrite
+ * positions chosen by a human (any human revision exists): then the save is refused.
+ */
+async function withLayout(xml: string, humanEdited: boolean) {
+  let definitions;
+  try {
+    ({ definitions } = await parse(xml));
+  } catch {
+    return { xml }; // validation reports the parse error
+  }
+  if (hasDi(definitions)) return { xml };
+  if (humanEdited)
+    return {
+      xml,
+      refused:
+        "The XML has no DI. A human has edited this diagram, so auto-layout would overwrite their positions: start from get_diagram and keep its DI, adding DI for new elements.",
+    };
+  const r = await autoLayout(xml);
+  return { xml: r.xml, layout: { mode: "auto" as const, notes: r.notes } };
+}
+
 export function buildMcp({ store, publicUrl, uiDir }: McpOptions) {
   const s = new McpServer({ name: "bpmn-collab-mcp", version: "0.1.0" });
 
@@ -43,16 +67,19 @@ export function buildMcp({ store, publicUrl, uiDir }: McpOptions) {
     {
       description:
         "Create a diagram (optionally from BPMN 2.0 XML). Returns id, version and the canvas URL for the human. " +
-        "Hosts that support MCP Apps also show the canvas inline.",
+        "XML without any DI (no bpmndi:BPMNDiagram content) is laid out automatically (bpmn-auto-layout + label/artifact placement); " +
+        "check the returned layout notes and issues. Hosts that support MCP Apps also show the canvas inline.",
       inputSchema: z.object({ name: z.string(), xml: z.string().optional() }),
       _meta: showCanvas,
     },
-    async ({ name, xml }) => {
+    async ({ name, xml: submitted }) => {
+      const prepared = submitted ? await withLayout(submitted, false) : undefined;
+      const xml = prepared?.xml;
       const issues = xml ? await validateXml(xml) : [];
       const errors = issues.filter((i) => i.severity === "error");
-      if (errors.length) return fail({ errors });
+      if (errors.length) return fail({ errors, layout: prepared?.layout });
       const d = store.create(name, xml);
-      return text({ ok: true, id: d.id, version: 1, canvasUrl: `${publicUrl}/canvas?id=${d.id}`, issues });
+      return text({ ok: true, id: d.id, version: 1, canvasUrl: `${publicUrl}/canvas?id=${d.id}`, layout: prepared?.layout, issues });
     },
   );
 
@@ -97,15 +124,23 @@ export function buildMcp({ store, publicUrl, uiDir }: McpOptions) {
   s.registerTool(
     "update_diagram",
     {
-      description: "Save a new full XML revision. Must pass baseVersion (the version you read). Validation errors reject the save; warnings (including layout warnings) are returned and should be fixed.",
+      description:
+        "Save a new full XML revision. Must pass baseVersion (the version you read). Validation errors reject the save; " +
+        "warnings (including layout warnings) are returned and should be fixed. Keep the DI from get_diagram: XML without any DI " +
+        "is laid out automatically only while no human has edited the diagram, otherwise it is refused.",
       inputSchema: z.object({ id: z.string(), xml: z.string(), baseVersion: z.number().int(), note: z.string().optional() }),
     },
-    async ({ id, xml, baseVersion, note }) => {
+    async ({ id, xml: submitted, baseVersion, note }) => {
+      const d = store.get(id);
+      if (!d) return fail({ error: "not found" });
+      const prepared = await withLayout(submitted, d.revisions.some((r) => r.author.startsWith("human:")));
+      if (prepared.refused) return fail({ error: prepared.refused });
+      const { xml, layout } = prepared;
       const issues = await validateXml(xml);
-      if (issues.some((i) => i.severity === "error")) return fail({ error: "validation failed", issues });
+      if (issues.some((i) => i.severity === "error")) return fail({ error: "validation failed", layout, issues });
       try {
         const rev = store.update(id, xml, baseVersion, "ai", note);
-        return text({ ok: true, version: rev.version, issues });
+        return text({ ok: true, version: rev.version, layout, issues });
       } catch (e) {
         if (e instanceof StoreError && e.code === 409)
           return fail({ error: e.message, conflict: true, hint: "Re-read with get_diagram, check get_changes_since, merge, retry." });
