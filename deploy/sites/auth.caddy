@@ -1,0 +1,38 @@
+# Keycloak (OAuth authorization server for /mcp on bpmn.teflux.dev)
+# - admin console and the master realm: admin IP only
+# - realm endpoints (discovery, authorize, token, login pages, account console): public, because
+#   Claude (Anthropic egress) and your browser must reach them
+# - anything else (e.g. /metrics, /health live on the management port anyway): 404
+{$AUTH_HOST} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	@admin path /admin /admin/* /realms/master /realms/master/*
+	handle @admin {
+		@allowed remote_ip {$ADMIN_IP}
+		handle @allowed {
+			reverse_proxy keycloak:8080
+		}
+		respond "Forbidden" 403
+	}
+
+	@public path /realms/* /resources/*
+	handle @public {
+		reverse_proxy keycloak:8080
+	}
+
+	handle {
+		respond "Not found" 404
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

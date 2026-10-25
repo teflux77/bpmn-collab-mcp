@@ -1,4 +1,6 @@
-# OAuth plan for the MCP endpoint (not implemented)
+# OAuth plan for the MCP endpoint
+
+> **Decision (2026-10-25): Keycloak, self-hosted on the VPS, with pre-registered public PKCE clients** (Claude accepts a client ID typed in the connector settings, so neither DCR nor the experimental CIMD is needed). Implemented in `src/auth.ts`; setup in `docs/deploy.md`, section "OAuth".
 
 Today `/mcp` is protected by an IP allowlist in Caddy (Anthropic's egress range + the admin IP). That is coarse: anyone using Claude can reach the server if they know the URL. This note prepares the move to OAuth. Research date: 2026-10-25; re-check vendor pages before choosing (fast-moving area).
 

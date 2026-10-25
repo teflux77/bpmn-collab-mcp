@@ -65,6 +65,22 @@ ssh deploy@<VPS_IP> 'sudo reboot'  # then check the diagrams are still listed (d
 
 In Claude (web/Desktop): Settings → Connectors → Add custom connector → `https://bpmn.teflux.dev/mcp`. `create_diagram` / `get_diagram` then render the canvas inline (MCP Apps).
 
+## OAuth on /mcp (Keycloak at https://auth.teflux.dev)
+
+Keycloak 26 + Postgres run in the same compose stack. The app verifies Keycloak's access tokens (issuer, audience `https://bpmn.teflux.dev/mcp`, scope `mcp`) and only accepts users listed in `OAUTH_ALLOWED_USERS`. The Caddy IP restriction on `/mcp` stays as a second layer. Keycloak's admin console and master realm are reachable from `ADMIN_IP` only.
+
+Setup, in order (the app keeps working without OAuth until the last step):
+
+1. On the VPS: `/opt/bpmn-collab/repo/scripts/server/keycloak-secrets.sh` (adds `AUTH_HOST`, generated `KC_DB_PASSWORD` and `KC_BOOTSTRAP_ADMIN_PASSWORD`, empty `OAUTH_*`).
+2. DNS: `SUBDOMAIN=auth npm run dns` then `-- --apply`.
+3. Push: the timer starts Keycloak and Postgres; Caddy gets the certificate for auth.teflux.dev.
+4. On the VPS: `/opt/bpmn-collab/repo/scripts/server/keycloak-setup.sh` creates the `teflux` realm (no self-registration, brute-force protection, refresh token rotation), the `mcp` scope (audience mapper) and two public PKCE clients: `claude-web` (`https://claude.ai/api/mcp/auth_callback`) and `claude-code` (loopback port 33418).
+5. Browser, from your IP: https://auth.teflux.dev/admin, sign in with `bootstrap-admin` (password: `grep KC_BOOTSTRAP_ADMIN_PASSWORD /opt/bpmn-collab/.env` on the VPS). In the master realm create your own admin, sign in with it and delete `bootstrap-admin`. In the `teflux` realm create your user: email, *Email verified* on, a password, and required action *Configure OTP* (or a passkey).
+6. On the VPS, in `/opt/bpmn-collab/.env`: `OAUTH_ISSUER='https://auth.teflux.dev/realms/teflux'` and `OAUTH_ALLOWED_USERS='<your email>'`; the timer restarts the app within 2 minutes (or `sudo systemctl start bpmn-update`).
+7. Claude web/Desktop: edit the connector `https://bpmn.teflux.dev/mcp`, advanced settings: client ID `claude-web`, no secret, then *Connect*. Claude Code: `claude mcp add --transport http --client-id claude-code --callback-port 33418 bpmn-prod https://bpmn.teflux.dev/mcp`, then `/mcp` to sign in.
+
+Rollback: empty `OAUTH_ISSUER` in the server env file; `/mcp` is back to the IP restriction only.
+
 ## SSH access (key in 1Password, Windows)
 
 The SSH key lives in 1Password ("Hetzner Teflux"); only its public half is on disk. `~/.ssh/config`:
@@ -89,7 +105,7 @@ Host bpmn
 - **IPv6**: `bpmn.teflux.dev` has an AAAA record. If your own connection gets IPv6 one day, your requests to `/mcp` will arrive from your IPv6 address: add it next to the IPv4 in the server's `ADMIN_IP` (space-separated) or `/mcp` answers 403. SSH by IPv4 literal (`ssh deploy@<VPS_IPV4>`) is unaffected.
 - **Your IP changed**: update `MY_IP` in `.env.local`, run `npm run firewall -- --apply` (works from anywhere: it only needs the Hetzner token); update `ADMIN_IP` in the server env file for `/mcp`. If you are locked out of SSH: Hetzner Console → server → Console (web VNC) or Rescue.
 - **Canvas password**: `scripts/server/set-canvas-password.sh` on the VPS, then `docker compose ... up -d caddy`.
-- **Backups**: daily at 03:30 UTC, `/opt/bpmn-collab/backups/bpmn-data-*.tgz`, 7 days kept. They live on the same VPS: copy them off-site from time to time (`scp deploy@<VPS_IP>:/opt/bpmn-collab/backups/* .`) or enable Hetzner backups/snapshots.
+- **Backups**: daily at 03:30 UTC, `/opt/bpmn-collab/backups/bpmn-data-*.tgz` and `keycloak-db-*.sql.gz` (restore with `gunzip -c <file> | docker compose ... exec -T keycloak-db psql -U keycloak -d keycloak`), 7 days kept. They live on the same VPS: copy them off-site from time to time (`scp deploy@<VPS_IP>:/opt/bpmn-collab/backups/* .`) or enable Hetzner backups/snapshots.
   Restore: `docker compose ... stop app`, then `docker run --rm -v bpmn-collab_bpmn-data:/data -v /opt/bpmn-collab/backups:/backup alpine:3.24.3 sh -c 'rm -rf /data/* && tar xzf /backup/<file>.tgz -C /data'`, then `docker compose ... start app`.
 - **Logs**: `docker compose -f /opt/bpmn-collab/repo/deploy/docker-compose.yml --env-file /opt/bpmn-collab/.env logs -f`.
 
