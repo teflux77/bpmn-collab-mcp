@@ -61,10 +61,13 @@ export function jwtVerifier(cfg: OAuthConfig): OAuthTokenVerifier {
         throw new OAuthError(OAuthErrorCode.InvalidToken, `Invalid access token: ${e?.code ?? e?.message ?? "rejected"}`);
       }
       if (typeof payload.exp !== "number") throw new OAuthError(OAuthErrorCode.InvalidToken, "Access token has no expiry");
+      const scopes = typeof payload.scope === "string" ? payload.scope.split(" ").filter(Boolean) : [];
+      // Log refusals with their reason, never the token itself.
+      if (!scopes.includes(cfg.scope)) console.warn(`/mcp refused: token without scope "${cfg.scope}" (scopes: ${scopes.join(" ") || "none"}, client ${payload.azp ?? "?"})`);
       return {
         token,
         clientId: String(payload.azp ?? payload.client_id ?? ""),
-        scopes: typeof payload.scope === "string" ? payload.scope.split(" ").filter(Boolean) : [],
+        scopes,
         expiresAt: payload.exp,
         resource: new URL(cfg.resource),
         extra: { sub: payload.sub, email: payload.email, emailVerified: payload.email_verified === true },
@@ -102,6 +105,8 @@ export function mountOAuth(app: express.Express, cfg: OAuthConfig): express.Requ
 
   const allowlist: express.RequestHandler = (req, res, next) => {
     if (isAllowed(req.auth, cfg.allowedUsers)) return next();
+    const extra = (req.auth?.extra ?? {}) as Record<string, unknown>;
+    console.warn(`/mcp refused: user not allowed (sub ${extra.sub ?? "?"}, email ${extra.email ?? "none"}, email_verified ${extra.emailVerified === true})`);
     res.status(403).json({ error: "access_denied", error_description: "This account is not allowed on this server." });
   };
   return [requireBearerAuth({ verifier: jwtVerifier(cfg), requiredScopes: [cfg.scope], resourceMetadataUrl: metadataUrl }), allowlist];
