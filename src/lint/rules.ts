@@ -5,6 +5,7 @@
  */
 import { metaOf } from "../model.js";
 import { layoutRules } from "../layout-check.js";
+import { collaborationRules } from "./collaboration.js";
 
 interface Reporter {
   report(id: string, message: string, path?: (string | number)[]): void;
@@ -82,4 +83,5 @@ export const pmRules: Record<string, RuleFactory> = {
   "activity-count-hint": activityCount,
   "gateway-flow-label": gatewayFlowLabel,
   ...layoutRules,
+  ...collaborationRules,
 };

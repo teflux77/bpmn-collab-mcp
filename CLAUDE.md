@@ -32,6 +32,7 @@ Register locally in Claude Code: `claude mcp add --transport http bpmn http://lo
 - `src/store.ts`: diagrams = revisions (full XML, author, version) + comments; JSON file persistence, optimistic concurrency via `baseVersion` (409).
 - `src/model.ts`: bpmn-moddle with the `pm:` extension (`src/moddle/process-meta.json`).
 - `src/validate.ts`: bpmn-moddle parse + bpmnlint (`recommended`, Miragon layout rules, project rules); severities in `src/lint/config.ts`.
+- `src/lint/collaboration.ts`: pools, lanes and message flows (BPMN 2.0.2 9.4 / 7.2.1 as errors, Method and Style as warnings); sources in `docs/modeling-references.md`.
 - `src/lint/rules.ts` (modeling, readability `pm/activity-count`) and `src/layout-check.ts` (DI geometry, checked per plane so drill-down sub-processes are handled): project rules in bpmnlint format, plugin name `pm`. Severities and thresholds: `src/lint/config.ts` only.
 - `src/issues.ts` + `src/triage.ts`: lint issue fingerprints, dismissals (stored per diagram), and the loop guard of AI saves (reset by any human save); errors cannot be dismissed.
 - `src/diff.ts`: `get_changes_since` on bpmn-js-differ, compensated for its gaps (artifacts, `pm:`, swapped values, crash on dangling DI).

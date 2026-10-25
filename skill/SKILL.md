@@ -12,6 +12,28 @@ description: Create, review and evolve BPMN 2.0 / DMN diagrams with a human thro
 4. Modify with `update_diagram` passing the `baseVersion` you read. On a conflict, re-read and merge.
 5. `update_diagram` returns the open issues (with fingerprints) and a loop guard: errors reject the save; triage the warnings as described in "Lint issues" below, never in an open-ended loop.
 
+## Pools, lanes and diagram types
+Decide the kind of diagram before drawing (OMG BPMN 2.0.2, 7.2.1; sources in `docs/modeling-references.md`):
+
+| The user wants | Diagram | How |
+|---|---|---|
+| How **one organization** does its work (the default here) | **Private, non-executable process** (`isExecutable="false"`) | One white-box pool for the organization, or no pool; **lanes** for its roles, departments or systems. |
+| How it **interacts with outside parties** (customer, supplier, bank, authority) | **Collaboration** | Its own white-box pool with lanes, each external party as a **black-box pool** (participant without process), **message flows** between pools. |
+| **What a partner sees** of the process (contract, interface) | **Public process** (`processType="Public"`) | Only the activities that send or receive messages, in their order; internal steps hidden. |
+| Several organizations that **each own their process** | **Collaboration with several white-box pools** | One pool per organization, each with its own lanes and start/end; they coordinate only by message flows. |
+
+Rules (the first two are validation errors, they make the model invalid BPMN):
+- A **message flow** connects two **separate pools** (or elements inside them), never two elements of the same pool (spec 9.4) [`pm/message-flow-between-pools`].
+- A **sequence flow** never leaves its pool or its sub-process (spec 7.2.1) [`pm/sequence-flow-in-container`]. A hand-off between lanes of one pool is a sequence flow; between pools it is a message flow.
+- **Pool = participant** (a company or a partner role, spec 9.3), not a department, a system or a step. Roles, departments and systems of the same organization are **lanes of one pool** [`pm/pools-without-interaction` warns about white-box pools that exchange no message].
+- **Lanes = who does the work** (role, department, system; their meaning is up to the modeler, spec 10.8). Every element of a process with lanes is in exactly one lane (`flowNodeRef`) [`pm/lane-membership`]. Nest lanes for department > role when useful.
+- An external party you do not model is a **black box**: a participant without `processRef`, no lanes, no flow nodes [`pm/empty-pool` suggests it for an empty process]. Its messages attach to the pool boundary.
+- Message flows start or end at message events, send/receive (or user/service) tasks, sub-processes or a black-box pool; a send task has an outgoing message flow, a catching message event an incoming one.
+- Split one organization's process into several pools only when their instances do not match 1:1 (e.g. a monthly batch vs. one instance per order), linked by messages.
+- Name pools after the participant ("Customer", "Spa"), lanes after the performer ("Receptionist", "ERP"), never after the process.
+- Choreography and conversation diagrams are not supported by the canvas (bpmn-js): do not produce them.
+- DI: pools and lanes are `BPMNShape`s with `isHorizontal="true"`; lanes fill their pool's width minus the 30 px name strip and stack without gaps; every element lies inside its lane's bounds; message flows are edges between pools.
+
 ## Readability: activities per level
 Count activities (tasks, sub-processes, call activities) per level (the process, or one sub-process); events and gateways do not count. Aim for readable levels **from the first draft**:
 - up to 8 activities: fine;
@@ -51,7 +73,7 @@ End with a summary: **X fixed, Y dismissed (with reasons), Z waiting for the hum
 - One start event per process level; explicit end events.
 - Sub-process: embedded detail, same context, no pool or lane. Call activity: reusable process (`calledElement`). Do not mix abstraction levels in one diagram (see "Readability" below).
 - Put business data in `bpmn:extensionElements` using `pm:Meta` (owner, system, sla, kpi, formRef, decisionRef), not in separate notes.
-- Pools = organizations, lanes = roles; use message flows only between pools.
+- Pools, lanes and the kind of diagram: see "Pools, lanes and diagram types" below.
 
 ## Finding and naming diagrams
 - `list_diagrams` returns each diagram with its `canvasUrl`: show them as clickable Markdown links named after the diagram, most recent first, so the user can open one in the browser outside the chat. The home page `/` lists them too.

@@ -34,6 +34,13 @@ export const lintConfig = {
     // project rules (src/lint/rules.ts)
     "pm/call-activity-ref": "error",
     "pm/gateway-flow-label": "warn",
+    // Pools, lanes, message flows (src/lint/collaboration.ts). Errors = BPMN 2.0.2 "MUST" violations.
+    "pm/message-flow-between-pools": "error", // 9.4: a message flow connects two separate pools
+    "pm/sequence-flow-in-container": "error", // 7.2.1: process flow cannot cross a pool / sub-process boundary
+    "pm/pools-without-interaction": "warn", // Method and Style: internal roles are lanes, not pools
+    "pm/lane-membership": "warn", // every element of a process with lanes is in exactly one lane
+    "pm/empty-pool": "info", // external party: black-box pool
+
     // Readability (soft, never an error): activities per level. Thresholds: change them here only.
     "pm/activity-count-hint": ["info", { above: 8, upTo: 12 }], // 9-12 activities: light suggestion
     "pm/activity-count": ["warn", { above: 12 }], // 13 and more: clearer warning
