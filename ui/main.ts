@@ -2,9 +2,11 @@ import "bpmn-js/dist/assets/diagram-js.css";
 import "bpmn-js/dist/assets/bpmn-js.css";
 import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import "diagram-js-minimap/assets/diagram-js-minimap.css";
+import "bpmn-js-token-simulation/assets/css/bpmn-js-token-simulation.css";
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import minimapModule from "diagram-js-minimap";
 import typeColorsModule from "./type-colors";
+import tokenSimulationModule from "bpmn-js-token-simulation";
 import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
 import { contentBox, fitViewbox, needsRefit } from "./view";
@@ -39,7 +41,8 @@ const modeler: any = new BpmnModeler({
   container: "#canvas",
   moddleExtensions: { pm: processMeta },
   // Official bpmn.io minimap: the viewport rectangle can be dragged to scroll the diagram.
-  additionalModules: [minimapModule, typeColorsModule], // + events and gateways coloured by type
+  // minimap, events and gateways coloured by type, official token simulation (toggle at the top left)
+  additionalModules: [minimapModule, typeColorsModule, tokenSimulationModule],
   minimap: { open: true },
 });
 // Shown at the bottom of the side panel, not over the canvas (it positions itself from its own element).
@@ -326,7 +329,11 @@ function fitToFreeArea() {
   const content = contentBox(modeler.get("elementRegistry").filter((e: any) => e.parent === root));
   if (!content) return;
   const box = $("#canvas").getBoundingClientRect();
-  const palette = document.querySelector("#canvas .djs-palette")?.getBoundingClientRect();
+  // left column: modeling palette, or token simulation toggle and palette (whichever are visible)
+  const leftControls = [...document.querySelectorAll("#canvas .djs-palette, #canvas .bts-toggle-mode, #canvas .bts-palette")]
+    .map((el) => el.getBoundingClientRect())
+    .filter((r) => r.width > 0 && r.height > 0);
+  const palette = leftControls.length ? leftControls.reduce((a, b) => (b.right > a.right ? b : a)) : undefined;
   const bar = $("#zoom-bar").getBoundingClientRect();
   const margin = 24;
   const insets = {
