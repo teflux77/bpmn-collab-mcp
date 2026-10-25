@@ -4,6 +4,7 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { hostHeaderValidation } from "@modelcontextprotocol/express";
 import { Store } from "./store.js";
+import { normalizeDrilldown } from "./model.js";
 import { buildMcp } from "./mcp.js";
 import { commentFromHuman, createFromHuman, loadForHuman, renameDiagram, saveFromHuman, setStatusFromHuman, type Outcome } from "./human.js";
 import { mountOAuth, type OAuthConfig } from "./auth.js";
@@ -38,7 +39,8 @@ export function createApp(opts: AppOptions) {
   app.all("/mcp", ...guard, (req, res) => mcp(req, res, req.body));
 
   // ---- .bpmn export: the XML of a stored revision, as a file ----
-  const sendBpmn = (res: express.Response, name: string, version: number, xml: string) => {
+  const sendBpmn = async (res: express.Response, name: string, version: number, stored: string) => {
+    const { xml } = await normalizeDrilldown(stored); // files open correctly in Camunda Modeler
     const file = exportFileName(name, version);
     res.set({
       "Content-Type": "application/xml; charset=utf-8",
@@ -49,20 +51,20 @@ export function createApp(opts: AppOptions) {
     res.send(xml);
   };
   // Latest revision, behind the same protection as the rest of /api (basic auth in Caddy).
-  app.get("/api/diagrams/:id/export.bpmn", (req, res) => {
+  app.get("/api/diagrams/:id/export.bpmn", async (req, res) => {
     const d = store.get(req.params.id);
     if (!d) return void res.status(404).json({ error: "not found" });
     const rev = store.latest(d);
-    sendBpmn(res, d.name, rev.version, rev.xml);
+    await sendBpmn(res, d.name, rev.version, rev.xml);
   });
   // Signed link (export_diagram, canvas fallback): no basic auth, one revision, expires in minutes.
-  app.get("/dl/:token", (req, res) => {
+  app.get("/dl/:token", async (req, res) => {
     const grant = signer.verify(req.params.token);
     if ("error" in grant) return void res.status(grant.error === "expired" ? 410 : 403).json({ error: grant.error === "expired" ? "link expired" : "invalid link" });
     const d = store.get(grant.id);
     const rev = d?.revisions.find((r) => r.version === grant.version);
     if (!d || !rev) return void res.status(404).json({ error: "not found" });
-    sendBpmn(res, d.name, rev.version, rev.xml);
+    await sendBpmn(res, d.name, rev.version, rev.xml);
   });
 
   // ---- REST used by the standalone canvas ----

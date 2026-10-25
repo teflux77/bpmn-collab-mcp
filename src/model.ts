@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { BpmnModdle } from "bpmn-moddle";
+import { normalizeDrilldownXml } from "./drilldown.js";
 
 export const processMeta = JSON.parse(
   fs.readFileSync(new URL("./moddle/process-meta.json", import.meta.url), "utf8"),
@@ -17,6 +18,11 @@ export async function parse(xml: string) {
     warnings: warnings as any[],
     elementsById: elementsById as Record<string, any>,
   };
+}
+
+/** Sub-process planes moved near the origin so they open correctly in bpmn-js based tools (Camunda). */
+export async function normalizeDrilldown(xml: string) {
+  return normalizeDrilldownXml(xml, moddle());
 }
 
 export async function toXml(element: any) {

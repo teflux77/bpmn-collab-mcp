@@ -8,6 +8,7 @@ import processMeta from "../src/moddle/process-meta.json";
 import { appBackend, restBackend, type Backend } from "./backend";
 import { contentBox, fitViewbox, needsRefit } from "./view";
 import { exportFileName } from "../src/filename";
+import { normalizeDrilldownXml } from "../src/drilldown";
 import {
   applyOverlays, authorLabel, isAi, loadPrefs, orphans, planOverlays, preview, savePrefs, svgWithComments, thread,
   type Bounds, type CanvasComment, type CommentPrefs, type OverlayPlan,
@@ -293,7 +294,7 @@ async function exportFile(kind: "bpmn" | "svg") {
   await flushSave();
   const { content, mime } =
     kind === "bpmn"
-      ? { content: (await modeler.saveXML({ format: true })).xml as string, mime: "application/xml" }
+      ? { content: await exportBpmn(), mime: "application/xml" }
       : { content: await exportSvg(), mime: "image/svg+xml" };
   const fileName = exportFileName(diagramName, version, kind);
   if (await backend.download(fileName, mime, content)) return status(`${fileName} downloaded`);
@@ -476,6 +477,12 @@ function applyPrefs(next: CommentPrefs) {
 $("#c-show").onchange = (e) => applyPrefs({ ...prefs, show: (e.target as HTMLInputElement).checked });
 $("#c-status").onchange = (e) => applyPrefs({ ...prefs, status: (e.target as HTMLSelectElement).value as CommentPrefs["status"] });
 $("#c-author").onchange = (e) => applyPrefs({ ...prefs, author: (e.target as HTMLSelectElement).value as CommentPrefs["author"] });
+
+/** The .bpmn file: sub-process planes start at the origin, so they open correctly in Camunda Modeler. */
+async function exportBpmn() {
+  const { xml } = await modeler.saveXML({ format: true });
+  return (await normalizeDrilldownXml(xml, modeler.get("moddle"))).xml;
+}
 
 async function exportSvg() {
   const { svg } = await modeler.saveSVG();

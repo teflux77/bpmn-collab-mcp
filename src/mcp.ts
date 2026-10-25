@@ -12,7 +12,7 @@ import { exportFileName, type ExportSigner } from "./export.js";
 import { instructions } from "./instructions.js";
 import { guardAiSave, openIssues, summarize, triage } from "./issues.js";
 import { currentIssues, dismissIssue, listIssues, restoreIssue } from "./triage.js";
-import { parse } from "./model.js";
+import { normalizeDrilldown, parse } from "./model.js";
 
 export interface McpOptions {
   store: Store;
@@ -57,6 +57,12 @@ async function withLayout(xml: string, humanEdited: boolean) {
   return { xml: r.xml, layout: { mode: "auto" as const, notes: r.notes } };
 }
 
+/** AI XML: sub-process planes drawn far from the origin are moved there (they would open empty). */
+async function withPlanes<T extends { xml: string }>(prepared: T) {
+  const { xml, moved } = await normalizeDrilldown(prepared.xml);
+  return { ...prepared, xml, ...(moved.length ? { planesMovedToOrigin: moved } : {}) };
+}
+
 /** Signed, read-only download link for one revision (no basic auth needed, expires in minutes). */
 export function downloadLink(signer: ExportSigner, publicUrl: string, id: string, version: number) {
   const { token, expiresAt } = signer.sign(id, version);
@@ -90,13 +96,16 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
       _meta: showCanvas,
     },
     async ({ name, xml: submitted }) => {
-      const prepared = submitted ? await withLayout(submitted, false) : undefined;
+      const prepared = submitted ? await withPlanes(await withLayout(submitted, false)) : undefined;
       const xml = prepared?.xml;
       const issues = xml ? await validateXml(xml) : [];
       const errors = issues.filter((i) => i.severity === "error");
       if (errors.length) return fail({ errors, layout: prepared?.layout });
       const d = store.create(name, xml);
-      return text({ ok: true, id: d.id, version: 1, canvasUrl: `${publicUrl}/canvas?id=${d.id}`, layout: prepared?.layout, issues });
+      return text({
+        ok: true, id: d.id, version: 1, canvasUrl: `${publicUrl}/canvas?id=${d.id}`, layout: prepared?.layout,
+        ...(prepared?.planesMovedToOrigin ? { planesMovedToOrigin: prepared.planesMovedToOrigin } : {}), issues,
+      });
     },
   );
 
@@ -166,9 +175,9 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
       if (!d) return fail({ error: "not found" });
       // A human revision counts once it is an edit: version 1 created from the web is the empty template.
       const humanEdited = d.revisions.some((r) => r.author.startsWith("human:") && r.version > 1);
-      const prepared = await withLayout(submitted, humanEdited);
-      if (prepared.refused) return fail({ error: prepared.refused });
-      const { xml, layout } = prepared;
+      const laidOut = await withLayout(submitted, humanEdited);
+      if (laidOut.refused) return fail({ error: laidOut.refused });
+      const { xml, layout, planesMovedToOrigin } = await withPlanes(laidOut);
       const issues = triage(await validateXml(xml), d.dismissed);
       if (issues.some((i) => i.severity === "error")) return fail({ error: "validation failed", layout, issues: openIssues(issues) });
       const before = store.latest(d).xml;
@@ -183,7 +192,7 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
         const { verdict, state } = guardAiSave(d.guard, relevant);
         store.setGuard(id, state);
         return text({
-          ok: true, version: rev.version, layout,
+          ok: true, version: rev.version, layout, ...(planesMovedToOrigin ? { planesMovedToOrigin } : {}),
           issueSummary: summarize(issues), openIssues: openIssues(issues),
           ...verdict,
           ...(touched.length
@@ -296,7 +305,8 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
       if (!d) return fail({ error: "not found" });
       const rev = store.latest(d);
       const fileName = exportFileName(d.name, rev.version);
-      return text({ ok: true, id, name: d.name, version: rev.version, fileName, ...downloadLink(signer, publicUrl, id, rev.version), xml: rev.xml });
+      const { xml } = await normalizeDrilldown(rev.xml);
+      return text({ ok: true, id, name: d.name, version: rev.version, fileName, ...downloadLink(signer, publicUrl, id, rev.version), xml });
     },
   );
 
