@@ -34,13 +34,22 @@ Rules (the first two are validation errors, they make the model invalid BPMN):
 - Choreography and conversation diagrams are not supported by the canvas (bpmn-js): do not produce them.
 - DI: pools and lanes are `BPMNShape`s with `isHorizontal="true"`; lanes fill their pool's width minus the 30 px name strip and stack without gaps; every element lies inside its lane's bounds; message flows are edges between pools.
 
+## Importing a diagram from an image or a PDF (photo, screenshot, Visio export)
+When the user gives a picture or a PDF of a process and wants it as a diagram:
+1. **Read before drawing.** List what you see, level by level: pools and lanes, every element with its exact label, every flow (source -> target, branch label), message flows, data objects, annotations. Copy labels **verbatim** (keep the source language, spelling and abbreviations); do not reword, translate or "improve" them.
+2. **Never invent.** If a label, an arrow end or a gateway type is unreadable or ambiguous, still create the element with the best reading and add a comment on it (`add_comment`) saying what is uncertain. Do not add steps, ends or branches that are not in the source.
+3. **Keep the source's layout.** Reproduce the arrangement with approximate coordinates (same order left to right, same rows, same lanes), scaled to the standard sizes; it lets the human compare with the original at a glance. Send XML without DI only for a single-pool source whose layout does not matter (auto-layout does not reproduce the source and lays out the first pool only).
+4. **Map the notation honestly.** A Visio or hand-drawn shape that is not BPMN (decision diamond, document, database) becomes the closest BPMN element (exclusive gateway, data object reference, data store reference); swimlanes become lanes of one pool unless they are separate organizations (see "Pools, lanes and diagram types").
+5. **Large sources** (more than ~40 elements, several pages): import page by page or pool by pool, then check the joins.
+6. **Finish with a check-list** for the human: counts per type (tasks, events, gateways, flows, lanes) read from the source vs. created, the elements you commented as uncertain, and the canvas link. Ask the human to confirm before refining.
+
 ## Readability: activities per level
 Count activities (tasks, sub-processes, call activities) per level (the process, or one sub-process); events and gateways do not count. Aim for readable levels **from the first draft**:
 - up to 8 activities: fine;
 - 9 to 12: light suggestion (`pm/activity-count-hint`, info);
 - more than 12: clearer warning (`pm/activity-count`); never blocking.
 
-When a level is too busy, group a coherent fragment into a **collapsed sub-process** (drill-down):
+When a level is too busy, group a coherent fragment into a **collapsed sub-process** (drill-down). **Use `extract_subprocess`** (element ids + name): the server checks the criteria below, moves the elements and their DI to the drill-down plane, rewires the flows and validates; rewrite the XML by hand only if the tool refuses for a reason you can fix. Criteria:
 - one entry and one exit, one identifiable business result, no sequence flow crossing its border elsewhere than at the entry and the exit, preferably within one lane;
 - a **message flow** that would cross the border blocks the grouping;
 - name it verb + object ("Ship order");

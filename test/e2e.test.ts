@@ -57,7 +57,7 @@ describe("MCP over streamable HTTP", () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_comment", "canvas_add_comment", "canvas_dismiss_issue", "canvas_export_link", "canvas_load", "canvas_rename",
-      "canvas_restore_issue", "canvas_save", "canvas_set_comment_status", "create_diagram", "dismiss_issue", "export_diagram",
+      "canvas_restore_issue", "canvas_save", "canvas_set_comment_status", "create_diagram", "dismiss_issue", "export_diagram", "extract_subprocess",
       "get_changes_since", "get_diagram", "list_comments", "list_diagrams", "list_issues", "rename_diagram", "resolve_comment",
       "restore_issue", "update_diagram", "validate_diagram",
     ]);

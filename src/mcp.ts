@@ -10,6 +10,8 @@ import { checkAnchor, commentFromHuman, loadForHuman, renameDiagram, saveFromHum
 import { autoLayout, hasDi } from "./autolayout.js";
 import { exportFileName, type ExportSigner } from "./export.js";
 import { instructions } from "./instructions.js";
+import { extractSubProcess } from "./refactor.js";
+import { cleanName } from "./store.js";
 import { guardAiSave, openIssues, summarize, triage } from "./issues.js";
 import { currentIssues, dismissIssue, listIssues, restoreIssue } from "./triage.js";
 import { normalizeDrilldown, parse } from "./model.js";
@@ -205,6 +207,39 @@ export function buildMcp({ store, publicUrl, uiDir, signer }: McpOptions) {
         if (e instanceof StoreError) return fail({ error: e.message });
         throw e;
       }
+    },
+  );
+
+  s.registerTool(
+    "extract_subprocess",
+    {
+      description:
+        "Refactor: move a fragment of one level (elementIds: its activities, events and gateways; boundary events, internal flows, " +
+        "their data objects and annotations follow) into a new collapsed sub-process named verb + object, with its DI on its own " +
+        "drill-down plane. The server checks the criteria (exactly one entry and one exit flow, no message flow on the fragment, no " +
+        "data used inside and outside), rewires the flows, places the shape where the fragment was and validates; on refusal " +
+        "nothing is saved and the reasons are returned. Prefer it to rewriting the XML by hand. Pass the baseVersion you read.",
+      inputSchema: z.object({
+        id: z.string(), elementIds: z.array(z.string()).min(1), name: z.string(), baseVersion: z.number().int(), note: z.string().optional(),
+      }),
+    },
+    async ({ id, elementIds, name, baseVersion, note }) => {
+      const d = store.get(id);
+      if (!d) return fail({ error: "not found" });
+      const n = cleanName(name);
+      if ("error" in n) return fail({ error: n.error });
+      const cur = store.latest(d);
+      if (baseVersion !== cur.version)
+        return fail({ error: `Version conflict: base ${baseVersion}, current ${cur.version}`, conflict: true, hint: "Re-read with get_diagram and retry." });
+      const r = await extractSubProcess(cur.xml, elementIds, n.name);
+      if (!r.ok) return fail({ error: "the fragment cannot be extracted", reasons: r.errors });
+      const issues = triage(await validateXml(r.xml), d.dismissed);
+      if (issues.some((i) => i.severity === "error")) return fail({ error: "validation failed after extraction", issues: openIssues(issues) });
+      const rev = store.update(id, r.xml, baseVersion, "ai", note ?? `extract_subprocess ${r.subProcessId}`);
+      return text({
+        ok: true, version: rev.version, subProcessId: r.subProcessId, moved: r.moved, warnings: r.warnings,
+        issueSummary: summarize(issues), openIssues: openIssues(issues),
+      });
     },
   );
 

@@ -28,6 +28,7 @@ Register locally in Claude Code: `claude mcp add --transport http bpmn http://lo
 - `src/mcp.ts`: model tools (create/get/update/validate/diff/comments/export) and app-only `canvas_*` tools + `ui://bpmn-collab/canvas.html` resource (MCP Apps, `@modelcontextprotocol/ext-apps`).
 - `src/human.ts`: human operations shared by REST and `canvas_*` tools (same save rule on both paths), including create and rename.
 - `ui/public/home.html`: home page `/` (list, search, create), plain HTML served as is.
+- `src/refactor.ts`: `extract_subprocess`, fragment -> collapsed sub-process (criteria checked, semantics and DI moved, flows rewired, lanes updated), validated before saving.
 - `src/drilldown.ts`: sub-process (drill-down) planes moved near the origin, because bpmn-js based tools (Camunda Modeler, our canvas) open them at (0, 0); applied to every export and to AI saves, never to stored human revisions.
 - `src/export.ts` + `src/filename.ts`: `.bpmn` file names and HMAC-signed download links (`/dl/<token>`, one revision, ~10 min); `src/auth.ts`: OAuth resource server for `/mcp` (Keycloak).
 - `src/store.ts`: diagrams = revisions (full XML, author, version) + comments; JSON file persistence, optimistic concurrency via `baseVersion` (409).
